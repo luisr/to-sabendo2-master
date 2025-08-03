@@ -1,0 +1,62 @@
+diff --git a/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.esm.js b/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.esm.js
+index 588a2c2..d37759a 100644
+--- a/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.esm.js
++++ b/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.esm.js
+@@ -10587,6 +10587,11 @@ var Droppable = /*#__PURE__*/function (_React$Component) {
+     value: function render() {
+       var _this$props = this.props,
+           children = _this$props.children,
++          droppableId = _this$props.droppableId,
++          type = _this$props.type,
++          isDropDisabled = _this$props.isDropDisabled,
++          isCombineEnabled = _this$props.isCombineEnabled,
++          ignoreContainerClipping = _this$props.ignoreContainerClipping,
+           direction = _this$props.direction;
+       var placeholder = this.getPlaceholder();
+       var provided = {
+@@ -10594,7 +10599,13 @@ var Droppable = /*#__PURE__*/function (_React$Component) {
+         innerRef: this.setRef,
+         placeholder: placeholder
+       };
+-      var snapshot = {
++      var snapshot = this.props.isDraggingOver ? {
++        isDraggingOver: this.props.isDraggingOver,
++        draggingOverWith: this.props.draggingOverWith,
++        draggingFromThisWith: this.props.draggingFromThisWith,
++        isUsingPlaceholder: this.props.isUsingPlaceholder
++      }
++      : {
+         isDraggingOver: false,
+         draggingOverWith: null,
+         draggingFromThisWith: null,
+diff --git a/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.cjs.js b/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.cjs.js
+index 451996c..17300bf 100644
+--- a/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.cjs.js
++++ b/node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.cjs.js
+@@ -10617,6 +10617,11 @@ var Droppable = /*#__PURE__*/function (_React$Component) {
+     value: function render() {
+       var _this$props = this.props,
+           children = _this$props.children,
++          droppableId = _this$props.droppableId,
++          type = _this$props.type,
++          isDropDisabled = _this$props.isDropDisabled,
++          isCombineEnabled = _this$props.isCombineEnabled,
++          ignoreContainerClipping = _this$props.ignoreContainerClipping,
+           direction = _this$props.direction;
+       var placeholder = this.getPlaceholder();
+       var provided = {
+@@ -10624,7 +10629,13 @@ var Droppable = /*#__PURE__*/function (_React$Component) {
+         innerRef: this.setRef,
+         placeholder: placeholder
+       };
+-      var snapshot = {
++      var snapshot = this.props.isDraggingOver ? {
++        isDraggingOver: this.props.isDraggingOver,
++        draggingOverWith: this.props.draggingOverWith,
++        draggingFromThisWith: this.props.draggingFromThisWith,
++        isUsingPlaceholder: this.props.isUsingPlaceholder
++      }
++      : {
+         isDraggingOver: false,
+         draggingOverWith: null,
+         draggingFromThisWith: null,
