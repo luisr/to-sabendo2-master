@@ -1,58 +1,59 @@
-
-export interface Comment {
-    id: string;
-    task_id: string;
-    user_id: string;
-    text: string;
-    created_at: string; // Alterado de 'date' para corresponder ao schema
-}
-
-export interface Baseline {
-    name: string;
-    start_date: Date;
-    end_date: Date;
-}
-
-export interface Task {
-    id: string;
-    project_id: string;
-    name: string;
-    assignee_id: string | null;
-    status_id: string;
-    priority: "Baixa" | "Média" | "Alta";
-    start_date: Date;
-    end_date: Date;
-    progress?: number;
-    dependencies: string[];
-    parent_id?: string | null;
-    milestone?: boolean;
-    tags?: string[];
-    comments?: Comment[];
-    baselines?: Baseline[]; // Adicionado para consistência com o frontend
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [key: string]: any;
-}
-
 export interface User {
-    id: string; // ID é sempre UUID string
-    name: string;
-    email: string;
-    contact?: string;
-    avatar: string;
-    role: "Admin" | "Gerente" | "Membro";
-    status: "Ativo" | "Inativo";
+  id: string;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Gerente' | 'Membro';
+  avatar_url?: string;
+  created_at: string;
 }
 
 export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  owner_id: string;
+  created_at: string;
+}
+
+export interface Task {
+  id: string;
+  name: string;
+  description?: string;
+  project_id: string;
+  project_name?: string; // Adicionado para a visão consolidada
+  assignee_id?: string;
+  assignee_name?: string;
+  status_id: string;
+  status_name?: string;
+  status_color?: string;
+  parent_id?: string | null;
+  start_date?: string;
+  end_date?: string;
+  progress?: number;
+  priority?: 'Baixa' | 'Média' | 'Alta' | 'Urgente';
+  created_at: string;
+  wbs_code: string;
+  tags: Tag[];
+  dependencies: string[];
+  subtasks?: Task[];
+  observation?: string;
+}
+
+export interface Tag {
     id: string;
     name: string;
-    description: string;
-    budget: number;
-    spent: number;
-    start_date: Date;
-    end_date: Date;
-    collaborators: {
-        user_id: string;
-        role: "Gerente" | "Membro";
-    }[];
+}
+
+// **NOVO TIPO ADICIONADO**
+export interface Observation {
+    id: string;
+    task_id: string;
+    user_id: string;
+    content?: string;
+    file_url?: string;
+    created_at: string;
+    users: { // Para o join com a tabela de usuários
+        name: string;
+        avatar_url?: string;
+    }
 }

@@ -22,6 +22,7 @@ BEGIN
         FROM public.collaborators
         WHERE user_id = auth.uid() AND role = 'Gerente'
     ) INTO managed_project_ids;
+    RAISE NOTICE 'Managed Project IDs: %', managed_project_ids;
 
     -- Se não gerencia nenhum projeto, retorna nulo.
     IF array_length(managed_project_ids, 1) IS NULL THEN
@@ -35,6 +36,9 @@ BEGIN
     SELECT id INTO done_status_id FROM public.task_statuses WHERE name = 'Feito' LIMIT 1;
 
     -- Calcular KPIs apenas para os projetos gerenciados
+    SET LOCAL row_security = off;
+
+    RAISE NOTICE 'Calculating total budget...';
     SELECT
         COALESCE(SUM(budget), 0)
     INTO
@@ -42,10 +46,11 @@ BEGIN
     FROM public.projects
     WHERE id = ANY(managed_project_ids);
 
+    RAISE NOTICE 'Calculating task counts...';
     SELECT
         COUNT(*),
         COUNT(CASE WHEN status_id = done_status_id THEN 1 END),
-        COUNT(CASE WHEN end_date < CURRENT_DATE AND status_id != done_status_id THEN 1 END)
+        COUNT(CASE WHEN end_date < CURRENT_DATE AND status_id IS DISTINCT FROM done_status_id THEN 1 END)
     INTO
         total_tasks,
         completed_tasks,
@@ -53,6 +58,7 @@ BEGIN
     FROM public.tasks
     WHERE project_id = ANY(managed_project_ids);
 
+    RAISE NOTICE 'Calculating overall progress...';
     SELECT COALESCE(AVG(progress), 0)
     INTO overall_progress
     FROM public.tasks
@@ -74,6 +80,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION get_manager_recent_tasks()
 RETURNS SETOF tasks AS $$
 BEGIN
+    SET LOCAL row_security = off; -- Desativa RLS localmente
     RETURN QUERY
     SELECT t.*
     FROM public.tasks t
@@ -81,6 +88,8 @@ BEGIN
     WHERE c.user_id = auth.uid() AND c.role = 'Gerente'
     ORDER BY t.updated_at DESC
     LIMIT 5;
+    -- RAISE NOTICE 'Recent Tasks: %', ARRAY(SELECT t FROM tasks t WHERE t.id IN (SELECT id FROM get_manager_recent_tasks())); -- Não podemos usar o nome da função dentro dela assim para logar o resultado diretamente de SETOF
+    -- Logging SETOF functions is tricky; we'll rely on whether the frontend receives data or an error.
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -90,6 +99,7 @@ CREATE OR REPLACE FUNCTION get_manager_tasks_by_status()
 RETURNS TABLE(status_name text, count bigint) AS $$
 BEGIN
     RETURN QUERY
+    SET LOCAL row_security = off; -- Desativa RLS localmente
     SELECT ts.name, COUNT(t.id)
     FROM public.task_statuses ts
     LEFT JOIN public.tasks t ON t.status_id = ts.id
@@ -97,4 +107,5 @@ BEGIN
     GROUP BY ts.name
     ORDER BY ts.display_order;
 END;
+    -- RAISE NOTICE 'Tasks by Status: %', ARRAY(SELECT r FROM get_manager_tasks_by_status()); -- Similarmente, logging TABLE functions directly within is complex.
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1,147 +1,118 @@
-
 "use client";
-
 import { useState, useEffect, Suspense, useMemo } from "react";
 import dynamic from 'next/dynamic';
 import PageHeader from "@/components/shared/page-header";
 import ProjectSelector from "@/components/shared/project-selector";
 import { Button } from "@/components/ui/button";
-import { Users, CheckCircle, DollarSign, ListTodo, Zap, Edit, Trash2, MoreVertical, Download, Upload, Sparkles, PlusCircle } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TableView from "@/components/projects/table-view";
 import KanbanBoard from "@/components/projects/kanban-board";
-import GanttChart from "@/components/projects/gantt-chart";
 import { useTasks } from "@/hooks/use-tasks";
 import { useProjects } from "@/hooks/use-projects";
-import { useCollaborators } from "@/hooks/use-collaborators";
 import { useUsers } from "@/hooks/use-users";
-import ManageCollaboratorsModal from "@/components/projects/manage-collaborators-modal";
-import { useAdminDashboard } from "@/hooks/use-admin-dashboard";
-import KpiCard from "@/components/dashboard/kpi-card";
-import OverviewChart from "@/components/dashboard/overview-chart";
-import RecentTasksCard from "@/components/dashboard/recent-tasks-card";
+import { useTableSettings } from "@/hooks/use-table-settings";
 import { Loader2 } from "lucide-react";
 import AddProjectModal from "@/components/projects/add-project-modal";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-    DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabase";
+import type { Task, Project } from "@/lib/types";
+import AddTaskModal from "@/components/projects/add-task-modal";
+import EditTaskModal from "@/components/projects/edit-task-modal";
+import ViewTaskModal from "@/components/projects/view-task-modal";
+import TaskObservationsModal from "@/components/projects/task-observations-modal";
 
+const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false });
 const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false });
 
-// Visão Consolidada para o Admin
-const ConsolidatedView = () => {
-    const { data, loading } = useAdminDashboard();
-    if (loading || !data) {
-        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-    }
-    const { kpis, recentProjects, recentTasks, tasksByStatus } = data;
+const AdminProjectsPageContent = () => {
+    const { projects, loading: projectsLoading } = useProjects();
+    const { tasks, loading: tasksLoading, selectedProjectId, setSelectedProjectId, addTask, updateTask, deleteTask } = useTasks();
+    const { statuses } = useTableSettings();
+    const { users } = useUsers();
+    
+    const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+    const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
+    const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+    const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+    const [taskToView, setTaskToView] = useState<Task | null>(null);
+    const [taskForObservations, setTaskForObservations] = useState<Task | null>(null);
+
+    useEffect(() => {
+        setSelectedProjectId('consolidated');
+    }, [setSelectedProjectId]);
+    
+    const handleOpenProjectModal = (project: Project | null = null) => {
+        setProjectToEdit(project);
+        setIsAddProjectModalOpen(true);
+    };
+    
+    const handleUpdateTask = (taskData: Partial<Task> & { id: string }) => {
+        updateTask(taskData.id, taskData);
+        setTaskToEdit(null);
+    };
+
+    const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [selectedProjectId, projects]);
+    const isConsolidatedView = selectedProjectId === 'consolidated';
+    const isLoading = projectsLoading || tasksLoading;
+    const projectSelectorOptions = useMemo(() => [{ id: 'consolidated', name: 'Visão Consolidada' }, ...projects], [projects]);
 
     return (
-        <div className="flex flex-col gap-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <KpiCard title="Orçamento Total" value={`R$ ${(kpis.total_budget || 0).toLocaleString('pt-BR')}`} icon={<DollarSign />} change="" />
-                <KpiCard title="Projetos Ativos" value={String(kpis.total_projects || 0)} icon={<ListTodo />} change="" />
-                <KpiCard title="Progresso Geral" value={`${Math.round(kpis.overall_progress || 0)}%`} icon={<CheckCircle />} change="" />
-                <KpiCard title="Tarefas em Risco" value={String(kpis.tasks_at_risk || 0)} icon={<Zap />} change="" valueClassName="text-destructive" />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <OverviewChart data={tasksByStatus || []} />
-                <RecentProjectsCard projects={recentProjects || []} />
-            </div>
+        <div className="flex flex-col gap-4 h-full">
+            <PageHeader
+                title={isConsolidatedView ? "Visão Consolidada (Admin)" : (currentProject?.name || "Projetos")}
+                actions={
+                    <div className="flex items-center gap-2">
+                        <ProjectSelector projects={projectSelectorOptions} value={selectedProjectId || 'consolidated'} onValueChange={setSelectedProjectId} showConsolidatedView={true} />
+                        <Button onClick={() => handleOpenProjectModal()}><PlusCircle className="mr-2 h-4 w-4" />Novo Projeto</Button>
+                    </div>
+                }
+            />
+
+            {isLoading ? (
+                <div className="flex flex-1 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
+            ) : (
+                <Tabs defaultValue="table" className="flex flex-col flex-1">
+                    <TabsList>
+                        <TabsTrigger value="table">Tabela</TabsTrigger>
+                        <TabsTrigger value="board">Kanban</TabsTrigger>
+                        <TabsTrigger value="gantt" disabled={isConsolidatedView}>Gantt</TabsTrigger>
+                        <TabsTrigger value="wbs" disabled={isConsolidatedView}>EAP</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="table" className="flex-1 overflow-y-auto">
+                        <TableView 
+                            tasks={tasks} users={users}
+                            onAddTask={() => setIsAddTaskModalOpen(true)}
+                            onEditTask={setTaskToEdit}
+                            onViewTask={setTaskToView}
+                            onOpenObservations={setTaskForObservations}
+                            deleteTask={deleteTask}
+                            loading={tasksLoading} isManager={true} selectedProjectId={selectedProjectId}
+                        />
+                    </TabsContent>
+                    <TabsContent value="board" className="flex-1 overflow-y-auto">
+                        <KanbanBoard tasks={tasks} statuses={statuses} onDragEnd={() => {}} loading={tasksLoading} />
+                    </TabsContent>
+                    <TabsContent value="gantt" className="flex-1 overflow-y-auto">
+                        {!isConsolidatedView && selectedProjectId && <GanttChartWrapper selectedProject={selectedProjectId} />}
+                    </TabsContent>
+                    <TabsContent value="wbs" className="flex-1 overflow-y-auto">
+                        {!isConsolidatedView && <WbsView tasks={tasks} />}
+                    </TabsContent>
+                </Tabs>
+            )}
+
+            <AddProjectModal isOpen={isAddProjectModalOpen} onOpenChange={(isOpen) => { setAddProjectModalOpen(isOpen); if (!isOpen) setProjectToEdit(null); }} onSaveProject={() => {}} projectToEdit={projectToEdit} />
+            <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={tasks} />
+            {taskToEdit && ( <EditTaskModal isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onSave={handleUpdateTask} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} /> )}
+            <ViewTaskModal isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} />
+            <TaskObservationsModal isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} />
         </div>
     );
-};
-
-
-const AdminProjectsPageContent = () => {
-  const [selectedProject, setSelectedProject] = useState<string>("consolidated");
-  const [activeTab, setActiveTab] = useState("table");
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [projectToEdit, setProjectToEdit] = useState<any>(null);
-
-  const { projects, loading: projectsLoading, addProject, updateProject } = useProjects();
-  const { addTasksBatch, setSelectedProjectId } = useTasks();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    setSelectedProjectId(selectedProject === 'consolidated' ? null : selectedProject);
-  }, [selectedProject, setSelectedProjectId]);
-
-  const handleOpenModal = (project: any = null) => {
-    setProjectToEdit(project);
-    setIsProjectModalOpen(true);
-  };
-  
-  const handleSaveProject = async (data: any) => { /* ... (mesma lógica de salvar do gerente) ... */ };
-
-  if (projectsLoading) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-  }
-
-  const projectSelectorOptions = [{ id: 'consolidated', name: 'Visão Consolidada' }, ...projects];
-
-  return (
-    <>
-      <div className="flex flex-col gap-4 h-full">
-        <PageHeader
-          title="Projetos (Admin)"
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <ProjectSelector projects={projectSelectorOptions} value={selectedProject} onValueChange={setSelectedProject} />
-              <Button onClick={() => handleOpenModal()}><PlusCircle className="mr-2 h-4 w-4" />Novo Projeto</Button>
-            </div>
-          }
-        />
-        
-        {selectedProject === 'consolidated' ? (
-            <ConsolidatedView />
-        ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col h-full">
-                <TabsList>
-                    <TabsTrigger value="table">Tabela</TabsTrigger>
-                    <TabsTrigger value="kanban">Kanban</TabsTrigger>
-                    <TabsTrigger value="gantt">Gantt</TabsTrigger>
-                    <TabsTrigger value="wbs">EAP</TabsTrigger>
-                </TabsList>
-                <TabsContent value="table" className="flex-1"><TableView /></TabsContent>
-                <TabsContent value="kanban" className="flex-1"><KanbanBoard /></TabsContent>
-                <TabsContent value="gantt" className="flex-1"><GanttChart selectedProject={selectedProject} /></TabsContent>
-                <TabsContent value="wbs" className="flex-1"><WbsView selectedProject={selectedProject || ''} /></TabsContent>
-            </Tabs>
-        )}
-
-      </div>
-      <AddProjectModal
-        isOpen={isProjectModalOpen}
-        onOpenChange={setIsProjectModalOpen}
-        onSaveProject={handleSaveProject}
-        projectToEdit={projectToEdit}
-      />
-    </>
-  );
 }
-
 
 export default function AdminProjectsPage() {
     return (
         <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin"/></div>}>
             <AdminProjectsPageContent />
         </Suspense>
-    )
+    );
 }

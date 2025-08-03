@@ -29,33 +29,14 @@ export const useAdminDashboard = () => {
     setLoading(true);
     try {
       console.log("Attempting to fetch admin dashboard data...");
+      
+      // Chamar a nova função RPC consolidada
+      const { data: dashboardData, error } = await supabase.rpc('get_manager_dashboard_data');
 
-      // Chamar todas as funções RPC em paralelo para otimizar o carregamento
-      const [kpisRes, recentProjectsRes, recentTasksRes, tasksByStatusRes] = await Promise.all([
-        supabase.rpc('get_manager_kpis'),
-        supabase.rpc('get_manager_recent_projects'),
-        supabase.rpc('get_manager_recent_tasks'),
-        supabase.rpc('get_manager_tasks_by_status')
-      ]);
+      if (error) throw error;
 
-      // Verificar erros em cada resposta
-      console.log("kpisRes: ", kpisRes);
-      if (kpisRes.error) throw kpisRes.error;
-      
-      console.log("recentProjectsRes: ", recentProjectsRes);
-      if (recentProjectsRes.error) throw recentProjectsRes.error;
-      
-      console.log("recentTasksRes: ", recentTasksRes);
-      if (recentTasksRes.error) throw recentTasksRes.error;
-      
-      console.log("tasksByStatusRes: ", tasksByStatusRes);
-      if (tasksByStatusRes.error) throw tasksByStatusRes.error;
-      
-      const kpisData = kpisRes.data?.[0];
-
-      if (!kpisData) {
-        throw new Error("A função de agregação de KPIs não retornou dados válidos.");
-      }
+      // O resultado já é o objeto consolidado
+      const { kpis: kpisData, recentProjects: recentProjectsRes, recentTasks: recentTasksRes, tasksByStatus: tasksByStatusRes } = dashboardData;
 
       setData({
         kpis: kpisData,

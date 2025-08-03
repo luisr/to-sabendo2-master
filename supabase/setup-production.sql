@@ -77,18 +77,25 @@ CREATE POLICY "Admins podem ver todos os usuários" ON public.users
   FOR SELECT USING (public.is_admin());
 
 -- Tabela: collaborators (CORREÇÃO FINAL E DEFINITIVA)
+DROP POLICY IF EXISTS "Membros do projeto podem ver a equipe" ON public.collaborators;
+DROP POLICY IF EXISTS "Gerentes podem gerenciar colaboradores do projeto" ON public.collaborators;
+DROP POLICY IF EXISTS "Admins podem gerenciar todos os colaboradores" ON public.collaborators;
+
 CREATE POLICY "Membros do projeto podem ver a equipe" ON public.collaborators
   FOR SELECT USING (
-    -- Um usuário pode ver colaboradores de um projeto se ele mesmo for um colaborador DAQUELE projeto.
     EXISTS (
       SELECT 1 FROM public.collaborators c2
       WHERE c2.user_id = public.uid_safe() AND c2.project_id = collaborators.project_id
     )
+    OR public.uid_safe() = user_id
+    OR public.is_admin()
   );
 CREATE POLICY "Gerentes podem gerenciar colaboradores do projeto" ON public.collaborators
   FOR ALL USING (public.is_project_manager(collaborators.project_id));
 CREATE POLICY "Admins podem gerenciar todos os colaboradores" ON public.collaborators
   FOR ALL USING (public.is_admin());
+
+-- Tabela: projects
 
 -- Tabela: projects
 CREATE POLICY "Membros podem ver projetos dos quais participam" ON public.projects
