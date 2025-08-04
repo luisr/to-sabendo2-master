@@ -35,8 +35,19 @@ const ProjectsPageContent = () => {
     const [taskForObservations, setTaskForObservations] = useState<Task | null>(null);
     const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
     
-    // **ARQUITETURA FINAL: A página pai agora controla a lógica de impressão.**
     const printRef = useRef<HTMLDivElement>(null);
+    const [isRefReady, setRefReady] = useState(false);
+
+    const callbackRef = (node: HTMLDivElement | null) => {
+        if (node) {
+            (printRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+            setRefReady(true);
+        } else {
+            (printRef as React.MutableRefObject<HTMLDivElement | null>).current = null;
+            setRefReady(false);
+        }
+    };
+    
     const handlePrint = useReactToPrint({ content: () => printRef.current });
 
     const isManager = useMemo(() => user?.role === 'Admin' || user?.role === 'Gerente', [user]);
@@ -79,10 +90,10 @@ const ProjectsPageContent = () => {
                            onAddTask={() => setIsAddTaskModalOpen(true)}
                            onPrint={handlePrint}
                            onOpenManager={() => setIsManagerModalOpen(true)}
-                           isLoading={loadingTasks}
+                           isLoading={!isRefReady}
                        />
                        <TableView 
-                           printSectionRef={printRef}
+                           printSectionRef={callbackRef}
                            tasks={tasks} users={users}
                            onEditTask={setTaskToEdit}
                            onViewTask={setTaskToView}

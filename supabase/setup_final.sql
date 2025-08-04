@@ -174,44 +174,29 @@ $$ LANGUAGE plpgsql VOLATILE SECURITY INVOKER;
 -- ========= PART 3: ROW LEVEL SECURITY (RLS) =========
 
 -- 3.1 LIMPEZA COMPLETA DE TODAS AS POLÍTICAS POSSÍVEIS (IDEMPOTENTE)
-DROP POLICY IF EXISTS "Allow read for project members or admins" ON public.projects;
-DROP POLICY IF EXISTS "Allow admins to manage projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow full access for admins" ON public.projects;
-DROP POLICY IF EXISTS "Allow read for members of the same project or admins" ON public.collaborators;
-DROP POLICY IF EXISTS "Allow admins to manage collaborators" ON public.collaborators;
-DROP POLICY IF EXISTS "Allow read access to fellow project members and admins" ON public.collaborators;
-DROP POLICY IF EXISTS "Allow full access for admins" ON public.collaborators;
-DROP POLICY IF EXISTS "Allow read for project members or admins" ON public.tasks;
-DROP POLICY IF EXISTS "Allow all for project members or admins" ON public.tasks;
-DROP POLICY IF EXISTS "Allow read access to project members and admins" ON public.tasks;
-DROP POLICY IF EXISTS "Allow write access to project members and admins" ON public.tasks;
-DROP POLICY IF EXISTS "Allow read access for project members and admins" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow insert on observations based on task visibility" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow delete for observation owners and admins" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow read access to observations on collaborated projects" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow admin read access to all observations" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow users to create observations on collaborated projects" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow admins to create observations on any task" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow users to delete their own observations" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow admins to delete any observation" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow read based on task visibility" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow insert for users who can see the task" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow delete for owners and admins" ON public.task_observations;
-DROP POLICY IF EXISTS "Allow full access based on task visibility" ON public.task_observations;
 DROP POLICY IF EXISTS "Allow users to manage their own data" ON public.users;
 DROP POLICY IF EXISTS "Allow admins to manage all users" ON public.users;
+DROP POLICY IF EXISTS "Allow read access to project members and admins" ON public.projects;
+DROP POLICY IF EXISTS "Allow full access for admins" ON public.projects;
+DROP POLICY IF EXISTS "Allow read access to fellow project members and admins" ON public.collaborators;
+DROP POLICY IF EXISTS "Allow full access for admins" ON public.collaborators;
+DROP POLICY IF EXISTS "Allow full access to project members and admins" ON public.tasks;
+DROP POLICY IF EXISTS "Allow full access based on task visibility" ON public.task_observations;
+DROP POLICY IF EXISTS "Allow delete only for owners or admins" ON public.task_observations;
+DROP POLICY IF EXISTS "Allow read access to all authenticated users" ON public.task_statuses;
+DROP POLICY IF EXISTS "Allow management by admins and managers" ON public.task_statuses;
+DROP POLICY IF EXISTS "Allow read access to all authenticated users" ON public.tags;
+DROP POLICY IF EXISTS "Allow management by admins and managers" ON public.tags;
 
--- 3.2 FUNÇÕES AUXILIARES DE RLS
--- Gets the current user's role safely.
+
+-- 3.2 FUNÇÕES AUXILIARES DE RLS (ARQUITETURA FINAL E NÃO-RECURSIVA)
 CREATE OR REPLACE FUNCTION public.get_my_role()
 RETURNS TEXT AS $$
 BEGIN
   RETURN (SELECT role FROM public.users WHERE id = auth.uid() LIMIT 1);
 END;
-$$ LANGUAGE plpgsql STABLE SECURITY INVOKER;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
--- Gets an array of project IDs the current user is a member of.
--- As a SECURITY DEFINER, it bypasses RLS on `collaborators`, breaking the recursion loop.
 CREATE OR REPLACE FUNCTION public.get_my_projects()
 RETURNS uuid[] AS $$
 DECLARE
@@ -257,6 +242,20 @@ CREATE POLICY "Allow full access based on task visibility" ON public.task_observ
   );
 CREATE POLICY "Allow delete only for owners or admins" ON public.task_observations
   FOR DELETE USING (user_id = auth.uid() OR public.get_my_role() = 'Admin');
+  
+-- === Task Statuses (CORREÇÃO) ===
+ALTER TABLE public.task_statuses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow read access to all authenticated users" ON public.task_statuses
+  FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow management by admins and managers" ON public.task_statuses
+  FOR ALL USING (public.get_my_role() IN ('Admin', 'Gerente'));
+  
+-- === Tags (CORREÇÃO) ===
+ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow read access to all authenticated users" ON public.tags
+  FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow management by admins and managers" ON public.tags
+  FOR ALL USING (public.get_my_role() IN ('Admin', 'Gerente'));
 
 
 -- ========= PART 4: SEED DATA (IDEMPOTENT) =========

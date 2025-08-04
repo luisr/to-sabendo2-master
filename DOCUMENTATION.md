@@ -78,3 +78,165 @@ A segurança é garantida no nível do banco de dados para evitar vazamento de d
 -   **Implementar Gerenciamento Centralizado de Etiquetas (Tags)**: Atualmente, as tags são texto livre. O plano é movê-las para uma tabela `public.tags` e gerenciá-las através de uma interface de admin.
 -   **Implementar a Criação de Gráficos e KPIs Customizados**: A UI para adicionar novos widgets ao dashboard existe, mas a lógica de backend para salvar e renderizar esses widgets precisa ser implementada.
 -   **Implementar Histórico de Alterações de Tarefas**: Criar uma tabela `public.task_history` e um modal para justificar alterações em datas de tarefas.
+
+---
+
+## 6. Visão Geral do Schema do Banco de Dados
+
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+```sql
+CREATE TABLE public.users (
+  id uuid NOT NULL,
+  name text,
+  email text UNIQUE,
+  avatar text,
+  role USER-DEFINED NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.projects (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL UNIQUE,
+  description text,
+  budget numeric DEFAULT 0.00 CHECK (budget >= 0::numeric),
+  start_date date,
+  end_date date,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT projects_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.collaborators (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  project_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  role USER-DEFINED NOT NULL DEFAULT 'Membro'::collaborator_role,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT collaborators_pkey PRIMARY KEY (id),
+  CONSTRAINT collaborators_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE,
+  CONSTRAINT collaborators_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.task_statuses (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL UNIQUE,
+  color text DEFAULT '#808080'::text,
+  display_order integer NOT NULL DEFAULT 0,
+  CONSTRAINT task_statuses_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.tags (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name text NOT NULL UNIQUE,
+  color text,
+  CONSTRAINT tags_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.tasks (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  project_id uuid NOT NULL,
+  name text NOT NULL,
+  description text,
+  assignee_id uuid,
+  status_id uuid,
+  priority USER-DEFINED NOT NULL DEFAULT 'Média'::task_priority,
+  start_date date,
+  end_date date,
+  progress integer NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+  wbs_code text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  observation text,
+  dependencies text[],
+  parent_id uuid,
+  custom_fields jsonb DEFAULT '{}'::jsonb,
+  CONSTRAINT tasks_pkey PRIMARY KEY (id),
+  CONSTRAINT tasks_assignee_id_fkey FOREIGN KEY (assignee_id) REFERENCES public.users(id) ON DELETE SET NULL,
+  CONSTRAINT tasks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE,
+  CONSTRAINT fk_parent_task FOREIGN KEY (parent_id) REFERENCES public.tasks(id) ON DELETE SET NULL,
+  CONSTRAINT tasks_status_id_fkey FOREIGN KEY (status_id) REFERENCES public.task_statuses(id) ON DELETE SET NULL
+);
+
+CREATE TABLE public.task_tags (
+  task_id uuid NOT NULL,
+  tag_id uuid NOT NULL,
+  CONSTRAINT task_tags_pkey PRIMARY KEY (task_id, tag_id),
+  CONSTRAINT task_tags_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE,
+  CONSTRAINT task_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.tags(id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.task_observations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  task_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  content text,
+  file_url text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT task_observations_pkey PRIMARY KEY (id),
+  CONSTRAINT task_observations_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id) ON DELETE CASCADE,
+  CONSTRAINT task_observations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.custom_columns (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  project_id uuid NOT NULL,
+  name text NOT NULL,
+  type USER-DEFINED NOT NULL,
+  display_order integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT custom_columns_pkey PRIMARY KEY (id),
+  CONSTRAINT custom_columns_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE public.change_history (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  project_id uuid NOT NULL,
+  user_id uuid,
+  change_description text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT change_history_pkey PRIMARY KEY (id),
+  CONSTRAINT change_history_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE,
+  CONSTRAINT change_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+-- As tabelas abaixo foram identificadas mas não estão no script de setup final.
+-- Elas podem ser de versões antigas ou funcionalidades planejadas.
+
+CREATE TABLE public.baselines (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  task_id uuid NOT NULL,
+  name text NOT NULL,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  CONSTRAINT baselines_pkey PRIMARY KEY (id),
+  CONSTRAINT baselines_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.tasks(id)
+);
+
+CREATE TABLE public.replan_history (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  project_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  observation text,
+  changes jsonb NOT NULL,
+  CONSTRAINT replan_history_pkey PRIMARY KEY (id),
+  CONSTRAINT replan_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT replan_history_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
+);
+
+CREATE TABLE public.user_dashboard_preferences (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  widget_id text NOT NULL,
+  is_visible boolean NOT NULL DEFAULT true,
+  CONSTRAINT user_dashboard_preferences_pkey PRIMARY KEY (id),
+  CONSTRAINT user_dashboard_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+
+```
