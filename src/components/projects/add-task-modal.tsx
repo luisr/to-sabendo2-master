@@ -9,20 +9,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { Task, User } from "@/lib/types";
+import type { Task, User, Tag } from "@/lib/types";
 import { DatePicker } from "../shared/date-picker";
 import { useToast } from "@/hooks/use-toast";
-import { TaskStatus } from "@/hooks/use-table-settings";
+import { useTableSettings, TaskStatus, Column } from "@/hooks/use-table-settings";
 import { parseUTCDate, formatToISODate } from "@/lib/date-utils";
+import { MultiSelect } from "../shared/multi-select";
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (taskData: Omit<Task, 'id' | 'created_at' | 'wbs_code'>) => void;
+  onSave: (taskData: Omit<Task, 'id' | 'created_at' | 'wbs_code'> & { tag_ids?: string[] }) => void;
   selectedProject: string;
   statuses: TaskStatus[];
   users: User[];
   tasks: Task[];
+  tags: Tag[];
 }
 
 export default function AddTaskModal({ 
@@ -32,10 +34,12 @@ export default function AddTaskModal({
     selectedProject, 
     statuses = [], 
     users = [], 
-    tasks = [] 
+    tasks = [],
+    tags = []
 }: AddTaskModalProps) {
     const { toast } = useToast();
-    const [taskData, setTaskData] = useState<Partial<Task>>({});
+    const { columns } = useTableSettings();
+    const [taskData, setTaskData] = useState<Partial<Task> & { tag_ids?: string[], custom_fields?: any }>({});
 
     useEffect(() => {
         if (isOpen && statuses.length > 0) {
@@ -51,13 +55,25 @@ export default function AddTaskModal({
                 progress: 0,
                 parent_id: null,
                 dependencies: [],
+                tag_ids: [],
+                custom_fields: {},
             });
         }
     }, [isOpen, statuses, selectedProject]);
 
-    const handleInputChange = (field: keyof Task, value: any) => {
+    const handleInputChange = (field: keyof typeof taskData, value: any) => {
         setTaskData(prev => ({...prev, [field]: value}));
     }
+
+    const handleCustomFieldChange = (field: string, value: any) => {
+        setTaskData(prev => ({
+            ...prev,
+            custom_fields: {
+                ...prev.custom_fields,
+                [field]: value,
+            }
+        }));
+    };
     
     const handleDependencyChange = (checked: boolean, dependencyId: string) => {
         const currentDependencies = taskData.dependencies || [];
@@ -70,9 +86,12 @@ export default function AddTaskModal({
             toast({ title: "Erro de Validação", description: "Nome da tarefa é obrigatório.", variant: "destructive"});
             return;
         }
-        onSave(taskData as Omit<Task, 'id' | 'created_at' | 'wbs_code'>);
+        onSave(taskData as Omit<Task, 'id' | 'created_at' | 'wbs_code'> & { tag_ids: string[] });
         onOpenChange(false);
     };
+
+    const tagOptions = tags.map(tag => ({ value: tag.id, label: tag.name }));
+    const customColumns = columns.filter(col => col.id.startsWith('custom_'));
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -115,6 +134,17 @@ export default function AddTaskModal({
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="tags" className="text-right">Tags</Label>
+            <div className="col-span-3">
+                <MultiSelect
+                    options={tagOptions}
+                    selected={taskData.tag_ids || []}
+                    onChange={(selected) => handleInputChange('tag_ids', selected)}
+                    placeholder="Selecione as tags"
+                />
+            </div>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="priority" className="text-right">Prioridade</Label>
             <Select value={taskData.priority} onValueChange={(value) => handleInputChange('priority', value)}>
                 <SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger>
@@ -145,6 +175,17 @@ export default function AddTaskModal({
                <DatePicker date={parseUTCDate(taskData.end_date)} onDateChange={(date) => handleInputChange('end_date', formatToISODate(date))}/>
             </div>
           </div>
+          {customColumns.map(col => (
+            <div key={col.id} className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor={col.id} className="text-right">{col.name}</Label>
+                <div className="col-span-3">
+                    {col.type === 'text' && <Input id={col.id} onChange={(e) => handleCustomFieldChange(col.id, e.target.value)} />}
+                    {col.type === 'number' && <Input type="number" id={col.id} onChange={(e) => handleCustomFieldChange(col.id, e.target.value)} />}
+                    {col.type === 'date' && <DatePicker onDateChange={(date) => handleCustomFieldChange(col.id, formatToISODate(date))} />}
+                    {col.type === 'progress' && <Slider onValueChange={(value) => handleCustomFieldChange(col.id, value[0])} max={100} step={1} />}
+                </div>
+            </div>
+          ))}
           <div className="grid grid-cols-4 items-start gap-4">
             <Label className="text-right pt-2">Dependências</Label>
             <div className="col-span-3">

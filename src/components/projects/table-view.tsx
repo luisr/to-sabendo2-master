@@ -18,6 +18,8 @@ interface TableViewProps {
     onViewTask: (task: Task) => void;
     onOpenObservations: (task: Task) => void;
     deleteTask: (taskId: string) => Promise<boolean>;
+    selectedTasks: Set<string>;
+    setSelectedTasks: (tasks: Set<string>) => void;
 }
 
 export default function TableView({
@@ -30,21 +32,11 @@ export default function TableView({
     onViewTask,
     onOpenObservations,
     deleteTask,
+    selectedTasks,
+    setSelectedTasks,
 }: TableViewProps) {
-    const { visibleColumns } = useTableSettings();
-    const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+    const { visibleColumns, columns } = useTableSettings();
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-    const columns = useMemo(() => [
-        { id: 'project_name', name: 'Projeto' },
-        { id: 'assignee', name: 'Responsável' },
-        { id: 'status', name: 'Status' },
-        { id: 'priority', name: 'Prioridade' },
-        { id: 'tags', name: 'Tags' },
-        { id: 'progress', name: 'Progresso' },
-        { id: 'start_date', name: 'Início' },
-        { id: 'end_date', name: 'Fim' },
-    ], []);
 
     const filteredVisibleColumns = useMemo(() => columns.filter(c => visibleColumns.includes(c.id)), [columns, visibleColumns]);
 
@@ -83,7 +75,7 @@ export default function TableView({
                 onOpenObservations={onOpenObservations}
                 onEditTask={onEditTask}
                 onDeleteTask={deleteTask}
-                renderSubtasks={renderTaskRows} // Passar a função de renderização para a recursão
+                renderSubtasks={renderTaskRows}
             />
         ));
     };
@@ -99,18 +91,19 @@ export default function TableView({
                                 onCheckedChange={(checked) => handleSelectAll(!!checked)} 
                             />
                         </TableHead>
+                        <TableHead>ID</TableHead>
                         <TableHead>Nome</TableHead>
-                        {filteredVisibleColumns.map(col => <TableHead key={col.id}>{col.name}</TableHead>)}
+                        {filteredVisibleColumns.filter(c => c.id !== 'formatted_id').map(col => <TableHead key={col.id}>{col.name}</TableHead>)}
                         <TableHead>Ações</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                      {loading ? (
-                        <TableRow><TableCell colSpan={filteredVisibleColumns.length + 3} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                        <TableRow><TableCell colSpan={filteredVisibleColumns.length + 4} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
                     ) : tasks.length > 0 ? (
                         renderTaskRows(tasks)
                     ) : (
-                        <TableRow><TableCell colSpan={filteredVisibleColumns.length + 3} className="h-24 text-center">Nenhuma tarefa encontrada.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={filteredVisibleColumns.length + 4} className="h-24 text-center">Nenhuma tarefa encontrada.</TableCell></TableRow>
                     )}
                 </TableBody>
             </Table>

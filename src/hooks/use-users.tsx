@@ -22,9 +22,8 @@ export const UsersProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const { toast } = useToast();
 
-  // Corrigido: buscar da tabela 'profiles'
   const fetchUsers = useCallback(async () => {
-    const { data, error } = await supabase.from("profiles").select("*");
+    const { data, error } = await supabase.rpc("get_all_users");
     if (error) {
       console.error("Error fetching users:", error);
       toast({ title: "Erro ao carregar usuários", description: error.message, variant: "destructive" });
@@ -34,7 +33,6 @@ export const UsersProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
-  // Corrigido: buscar da tabela 'profiles'
   const fetchCurrentUser = useCallback(async (sessionUser: any) => {
     const { data, error } = await supabase
       .from("profiles")
@@ -75,7 +73,6 @@ export const UsersProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [fetchUsers, fetchCurrentUser]);
 
-  // Corrigido: atualizar a tabela 'profiles'
   const updateUser = async (userId: string, updates: Partial<User>): Promise<boolean> => {
     const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
     if (error) {

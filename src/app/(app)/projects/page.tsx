@@ -11,6 +11,7 @@ import TableHeaderActions from "@/components/projects/table-header-actions";
 import { useTasks } from "@/hooks/use-tasks";
 import { useProjects } from "@/hooks/use-projects";
 import { useUsers } from "@/hooks/use-users";
+import { useTags } from "@/hooks/use-tags";
 import { useTableSettings } from "@/hooks/use-table-settings";
 import { Loader2 } from "lucide-react";
 import type { Task } from "@/lib/types";
@@ -19,6 +20,7 @@ import EditTaskModal from "@/components/projects/edit-task-modal";
 import ViewTaskModal from "@/components/projects/view-task-modal";
 import TaskObservationsModal from "@/components/projects/task-observations-modal";
 import TableManagerModal from "@/components/projects/table-manager-modal";
+import SetSubtaskModal from "@/components/projects/set-subtask-modal";
 
 const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false });
 const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false });
@@ -48,8 +50,9 @@ const filterTasks = (tasks: Task[], statusFilter: string, userFilter: string): T
 const ProjectsPageContent = () => {
     const { projects } = useProjects();
     const { user, users } = useUsers();
+    const { tags } = useTags();
     const { statuses } = useTableSettings();
-    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask } = useTasks();
+    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask, setParentTask } = useTasks();
     
     // Estados para os modais
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
@@ -57,10 +60,14 @@ const ProjectsPageContent = () => {
     const [taskToView, setTaskToView] = useState<Task | null>(null);
     const [taskForObservations, setTaskForObservations] = useState<Task | null>(null);
     const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
+    const [isSetSubtaskModalOpen, setIsSetSubtaskModalOpen] = useState(false);
 
     // Estados para os filtros
     const [statusFilter, setStatusFilter] = useState('all');
     const [userFilter, setUserFilter] = useState('all');
+    
+    // Estado para tarefas selecionadas
+    const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
     
     const printRef = useRef<HTMLDivElement>(null);
     const handlePrint = useReactToPrint({ content: () => printRef.current });
@@ -78,6 +85,13 @@ const ProjectsPageContent = () => {
     
     // Aplicar os filtros às tarefas
     const filteredTasks = useMemo(() => filterTasks(tasks, statusFilter, userFilter), [tasks, statusFilter, userFilter]);
+
+    const handleSetSubtask = async (parentId: string) => {
+        await setParentTask(Array.from(selectedTasks), parentId);
+        setSelectedTasks(new Set());
+        setIsSetSubtaskModalOpen(false);
+        refetchTasks();
+    };
 
     return (
         <div className="flex flex-col gap-4 h-full">
@@ -103,7 +117,9 @@ const ProjectsPageContent = () => {
                            onAddTask={() => setIsAddTaskModalOpen(true)}
                            onPrint={handlePrint}
                            onOpenManager={() => setIsManagerModalOpen(true)}
+                           onSetSubtask={() => setIsSetSubtaskModalOpen(true)}
                            isLoading={!printRef.current}
+                           selectedTasks={selectedTasks}
                            // Passar props dos filtros
                            statuses={statuses}
                            users={users}
@@ -123,6 +139,8 @@ const ProjectsPageContent = () => {
                            loading={loadingTasks} 
                            isManager={isManager}
                            currentUserId={user?.id}
+                           selectedTasks={selectedTasks}
+                           setSelectedTasks={setSelectedTasks}
                        />
                     </TabsContent>
                     <TabsContent value="board" className="flex-1 overflow-y-auto"><KanbanBoard tasks={filteredTasks} statuses={statuses} onDragEnd={() => {}} loading={loadingTasks} /></TabsContent>
@@ -131,11 +149,38 @@ const ProjectsPageContent = () => {
                 </Tabs>
             )}
 
-            <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={tasks} />
-            {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onTaskUpdate={refetchTasks} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} /> )}
+            <AddTaskModal 
+                isOpen={isAddTaskModalOpen} 
+                onOpenChange={setIsAddTaskModalOpen} 
+                onSave={addTask} 
+                selectedProject={selectedProjectId || ''} 
+                statuses={statuses} 
+                users={users} 
+                tasks={tasks} 
+                tags={tags}
+            />
+            {taskToEdit && ( 
+                <EditTaskModal 
+                    key={`edit-${taskToEdit.id}`} 
+                    isOpen={!!taskToEdit} 
+                    onOpenChange={() => setTaskToEdit(null)} 
+                    onTaskUpdate={refetchTasks} 
+                    task={taskToEdit} 
+                    statuses={statuses} 
+                    users={users} 
+                    tasks={tasks}
+                    tags={tags}
+                /> 
+            )}
             {taskToView && ( <ViewTaskModal key={`view-${taskToView.id}`} isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} /> )}
             {taskForObservations && ( <TaskObservationsModal key={`obs-${taskForObservations.id}`} isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} /> )}
             <TableManagerModal isOpen={isManagerModalOpen} onOpenChange={setIsManagerModalOpen} />
+            <SetSubtaskModal
+                isOpen={isSetSubtaskModalOpen}
+                onOpenChange={setIsSetSubtaskModalOpen}
+                tasks={tasks.filter(t => !selectedTasks.has(t.id))}
+                onSetParent={handleSetSubtask}
+            />
         </div>
     );
 }

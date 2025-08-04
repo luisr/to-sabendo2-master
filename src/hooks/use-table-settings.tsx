@@ -1,120 +1,194 @@
 "use client";
-import { createContext, useContext, useState, type ReactNode, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from "@/lib/supabase";
-import { useToast } from "./use-toast";
+import { useToast } from "@/hooks/use-toast";
 
-export interface TaskStatus { id: string; name: string; color: string; display_order: number; }
-export interface CustomColumn { id: string; project_id: string; name: string; type: 'texto' | 'numero' | 'data' | 'formula'; display_order: number; created_at: string; }
-export interface Tag { id: string; name: string; }
+// Tipos
+export interface TaskStatus {
+  id: string;
+  name: string;
+  color: string;
+  display_order?: number;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+}
+
+export type ColumnType = 'text' | 'number' | 'date' | 'progress';
+
+export interface Column {
+  id: string;
+  name: string;
+  type: ColumnType;
+}
 
 interface TableSettingsContextType {
   statuses: TaskStatus[];
-  customColumns: CustomColumn[];
   tags: Tag[];
   loading: boolean;
+  addStatus: (status: Omit<TaskStatus, 'id'>) => Promise<TaskStatus | null>;
+  updateStatus: (id: string, updates: Partial<TaskStatus>) => Promise<boolean>;
+  deleteStatus: (id: string) => Promise<boolean>;
+  addTag: (tag: Omit<Tag, 'id'>) => Promise<Tag | null>;
+  updateTag: (id: string, updates: Partial<Tag>) => Promise<boolean>;
+  deleteTag: (id: string) => Promise<boolean>;
   visibleColumns: string[];
   setVisibleColumns: (columns: string[]) => void;
-  addStatus: (data: { name: string; color: string; }) => Promise<TaskStatus | null>;
-  updateStatus: (id: string, data: Partial<TaskStatus>) => Promise<boolean>;
-  deleteStatus: (id: string) => Promise<boolean>;
-  addTag: (data: { name: string; }) => Promise<Tag | null>;
-  updateTag: (id: string, data: Partial<Tag>) => Promise<boolean>;
-  deleteTag: (id: string) => Promise<boolean>;
-  addCustomColumn: (data: any) => Promise<void>;
-  deleteCustomColumn: (id: string) => Promise<void>;
+  columns: Column[];
+  addColumn: (columnName: string, columnType: ColumnType) => void;
+  updateColumn: (columnId: string, newName: string, newType: ColumnType) => void;
+  duplicateColumn: (columnId: string) => void;
+  deleteColumn: (columnId: string) => void;
 }
 
 const TableSettingsContext = createContext<TableSettingsContextType | undefined>(undefined);
 
-const initialVisibleColumns = ['project_name', 'assignee', 'status', 'priority', 'progress', 'start_date', 'end_date'];
+const initialColumns: Column[] = [
+    { id: 'formatted_id', name: 'ID', type: 'text' },
+    { id: 'project_name', name: 'Projeto', type: 'text' },
+    { id: 'assignee', name: 'Responsável', type: 'text' },
+    { id: 'status', name: 'Status', type: 'text' },
+    { id: 'priority', name: 'Prioridade', type: 'text' },
+    { id: 'tags', name: 'Tags', type: 'text' },
+    { id: 'progress', name: 'Progresso', type: 'progress' },
+    { id: 'start_date', name: 'Início', type: 'date' },
+    { id: 'end_date', name: 'Fim', type: 'date' },
+    { id: 'duration', name: 'Duração', type: 'number' },
+];
 
 export const TableSettingsProvider = ({ children }: { children: ReactNode }) => {
   const [statuses, setStatuses] = useState<TaskStatus[]>([]);
-  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(initialVisibleColumns);
+  const [loading, setLoading] = useState(true);
+  const [columns, setColumns] = useState<Column[]>(initialColumns);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(initialColumns.map(c => c.id));
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [statusRes, columnRes, tagRes] = await Promise.all([
-      supabase.from('task_statuses').select('*').order('display_order'),
-      supabase.from('custom_columns').select('*').order('display_order'),
-      supabase.from('tags').select('*').order('name')
-    ]);
-
-    setStatuses(statusRes.data || []);
-    setCustomColumns(columnRes.data || []);
-    setTags(tagRes.data || []);
-    
-    setLoading(false);
-  }, []);
+    try {
+      const [statusRes, tagsRes] = await Promise.all([
+        supabase.from('task_statuses').select('*').order('display_order'),
+        supabase.from('tags').select('*')
+      ]);
+      if (statusRes.error) throw statusRes.error;
+      if (tagsRes.error) throw tagsRes.error;
+      setStatuses(statusRes.data || []);
+      setTags(tagsRes.data || []);
+    } catch (error: any) {
+      toast({ title: "Erro ao carregar configurações", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const addStatus = async (data: { name: string; color: string; }): Promise<TaskStatus | null> => {
-    const nextOrder = statuses.length > 0 ? Math.max(...statuses.map(s => s.display_order)) + 1 : 1;
-    const { data: newStatus, error } = await supabase.from('task_statuses').insert({ ...data, display_order: nextOrder }).select().single();
+  // Funções de Status
+  const addStatus = async (status: Omit<TaskStatus, 'id'>) => {
+    const { data, error } = await supabase.from('task_statuses').insert(status).select();
     if (error) {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
+        toast({ title: "Erro ao adicionar status", description: error.message, variant: "destructive" });
         return null;
     }
-    if (newStatus) setStatuses(prev => [...prev, newStatus]);
+    const newStatus = data[0];
+    setStatuses(prev => [...prev, newStatus]);
     return newStatus;
   };
-
-  const updateStatus = async (id: string, data: Partial<TaskStatus>): Promise<boolean> => {
-    const { error } = await supabase.from('task_statuses').update(data).eq('id', id);
-    if (error) return false;
-    setStatuses(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-    return true;
+  const updateStatus = async (id: string, updates: Partial<TaskStatus>) => {
+      const { error } = await supabase.from('task_statuses').update(updates).eq('id', id);
+      if(error) {
+          toast({ title: "Erro ao atualizar status", description: error.message, variant: "destructive" });
+          return false;
+      }
+      setStatuses(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+      return true;
+  };
+  const deleteStatus = async (id: string) => {
+      const { error } = await supabase.from('task_statuses').delete().eq('id', id);
+      if(error) {
+          toast({ title: "Erro ao excluir status", description: error.message, variant: "destructive" });
+          return false;
+      }
+      setStatuses(prev => prev.filter(s => s.id !== id));
+      return true;
   };
 
-  const deleteStatus = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from('task_statuses').delete().eq('id', id);
-    if (error) return false;
-    setStatuses(prev => prev.filter(s => s.id !== id));
-    return true;
-  }
-
-  const addTag = async (data: { name: string; }): Promise<Tag | null> => {
-    const { data: newTag, error } = await supabase.from('tags').insert(data).select().single();
+  // Funções de Tag
+  const addTag = async (tag: Omit<Tag, 'id'>) => {
+    const { data, error } = await supabase.from('tags').insert(tag).select();
     if (error) {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
+        toast({ title: "Erro ao adicionar etiqueta", description: error.message, variant: "destructive" });
         return null;
     }
-    if (newTag) setTags(prev => [...prev, newTag]);
+    const newTag = data[0];
+    setTags(prev => [...prev, newTag]);
     return newTag;
   };
-
-  const updateTag = async (id: string, data: Partial<Tag>): Promise<boolean> => {
-    const { error } = await supabase.from('tags').update(data).eq('id', id);
-    if (error) return false;
-    setTags(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
-    return true;
+  const updateTag = async (id: string, updates: Partial<Tag>) => {
+      const { error } = await supabase.from('tags').update(updates).eq('id', id);
+      if(error) {
+          toast({ title: "Erro ao atualizar etiqueta", description: error.message, variant: "destructive" });
+          return false;
+      }
+      setTags(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+      return true;
+  };
+  const deleteTag = async (id: string) => {
+      const { error } = await supabase.from('tags').delete().eq('id', id);
+      if(error) {
+          toast({ title: "Erro ao excluir etiqueta", description: error.message, variant: "destructive" });
+          return false;
+      }
+      setTags(prev => prev.filter(t => t.id !== id));
+      return true;
   };
 
-  const deleteTag = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from('tags').delete().eq('id', id);
-    if (error) return false;
-    setTags(prev => prev.filter(t => t.id !== id));
-    return true;
-  }
-  
-  const addCustomColumn = async (data: any) => { /* Lógica para adicionar coluna */ };
-  const deleteCustomColumn = async (id: string) => { /* Lógica para deletar coluna */ };
-
-  const contextValue = {
-    statuses, customColumns, tags, loading, visibleColumns,
-    setVisibleColumns, addStatus, updateStatus, deleteStatus,
-    addTag, updateTag, deleteTag, addCustomColumn, deleteCustomColumn
+  // Funções de Coluna
+  const addColumn = (columnName: string, columnType: ColumnType) => {
+    const newColumn = {
+        id: `custom_${Date.now()}`,
+        name: columnName,
+        type: columnType,
+    };
+    setColumns(prev => [...prev, newColumn]);
+    setVisibleColumns(prev => [...prev, newColumn.id]);
   };
+
+  const updateColumn = (columnId: string, newName: string, newType: ColumnType) => {
+    setColumns(prev => prev.map(c => c.id === columnId ? { ...c, name: newName, type: newType } : c));
+  };
+
+  const duplicateColumn = (columnId: string) => {
+    const columnToDuplicate = columns.find(c => c.id === columnId);
+    if (columnToDuplicate) {
+        const newColumn = {
+            id: `${columnToDuplicate.id}_${Date.now()}`,
+            name: `${columnToDuplicate.name} (Cópia)`,
+            type: columnToDuplicate.type,
+        };
+        setColumns(prev => [...prev, newColumn]);
+        setVisibleColumns(prev => [...prev, newColumn.id]);
+    }
+  };
+
+  const deleteColumn = (columnId: string) => {
+    setColumns(prev => prev.filter(c => c.id !== columnId));
+    setVisibleColumns(prev => prev.filter(id => id !== columnId));
+  };
+
 
   return (
-    <TableSettingsContext.Provider value={contextValue}>
+    <TableSettingsContext.Provider value={{ 
+      statuses, tags, loading, addStatus, updateStatus, deleteStatus,
+      addTag, updateTag, deleteTag,
+      visibleColumns, setVisibleColumns,
+      columns, addColumn, updateColumn, duplicateColumn, deleteColumn
+    }}>
       {children}
     </TableSettingsContext.Provider>
   );
@@ -123,7 +197,7 @@ export const TableSettingsProvider = ({ children }: { children: ReactNode }) => 
 export const useTableSettings = () => {
   const context = useContext(TableSettingsContext);
   if (context === undefined) {
-    throw new Error("useTableSettings must be used within a TableSettingsProvider");
+    throw new Error('useTableSettings must be used within a TableSettingsProvider');
   }
   return context;
 };

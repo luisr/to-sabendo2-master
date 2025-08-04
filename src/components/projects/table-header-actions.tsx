@@ -1,6 +1,6 @@
 "use client";
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings, Printer } from 'lucide-react';
+import { PlusCircle, Settings, Printer, Network } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { User, TaskStatus } from "@/lib/types";
 
@@ -10,7 +10,9 @@ interface TableHeaderActionsProps {
   onAddTask: () => void;
   onPrint: () => void;
   onOpenManager: () => void;
+  onSetSubtask: () => void;
   isLoading: boolean;
+  selectedTasks: Set<string>;
   // Props para os filtros
   statuses: TaskStatus[];
   users: User[];
@@ -26,7 +28,9 @@ export default function TableHeaderActions({
   onAddTask,
   onPrint,
   onOpenManager,
+  onSetSubtask,
   isLoading,
+  selectedTasks,
   // Filtros
   statuses,
   users,
@@ -68,6 +72,12 @@ export default function TableHeaderActions({
           <Button variant="outline" size="sm" onClick={onAddTask}>
             <PlusCircle className="h-4 w-4 mr-2" />
             Adicionar Tarefa
+          </Button>
+        )}
+        {isManager && selectedTasks.size > 0 && (
+          <Button variant="outline" size="sm" onClick={onSetSubtask}>
+            <Network className="h-4 w-4 mr-2" />
+            Definir como Subtarefa
           </Button>
         )}
         <Button variant="outline" size="sm" onClick={onPrint} disabled={isLoading}>

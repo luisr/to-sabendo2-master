@@ -4,33 +4,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useTableSettings, TaskStatus, Tag } from "@/hooks/use-table-settings";
-import { Trash2, PlusCircle } from "lucide-react";
+import { useTableSettings, TaskStatus, Tag, ColumnType } from "@/hooks/use-table-settings";
+import { Trash2, PlusCircle, Copy, Edit, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TableManagerModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const DEFAULT_COLUMNS = [
-    { id: 'project_name', name: 'Projeto' }, // **Adicionado**
-    { id: 'assignee', name: 'Responsável' },
-    { id: 'status', name: 'Status' },
-    { id: 'priority', name: 'Prioridade' },
-    { id: 'tags', name: 'Tags' },
-    { id: 'progress', name: 'Progresso' },
-    { id: 'start_date', name: 'Início' },
-    { id: 'end_date', name: 'Fim' },
-];
-
 export default function TableManagerModal({ isOpen, onOpenChange }: TableManagerModalProps) {
   const { 
     statuses, tags, addStatus, updateStatus, deleteStatus, 
     addTag, updateTag, deleteTag, 
-    visibleColumns, setVisibleColumns 
+    visibleColumns, setVisibleColumns, 
+    columns, addColumn, updateColumn, duplicateColumn, deleteColumn 
   } = useTableSettings();
   const { toast } = useToast();
 
@@ -39,6 +30,11 @@ export default function TableManagerModal({ isOpen, onOpenChange }: TableManager
   const [newStatusName, setNewStatusName] = useState("");
   const [newStatusColor, setNewStatusColor] = useState("#808080");
   const [newTagName, setNewTagName] = useState("");
+  const [newColumnName, setNewColumnName] = useState("");
+  const [newColumnType, setNewColumnType] = useState<ColumnType>("text");
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [editingColumnName, setEditingColumnName] = useState("");
+  const [editingColumnType, setEditingColumnType] = useState<ColumnType>("text");
   const [localVisibleColumns, setLocalVisibleColumns] = useState<string[]>([]);
 
   useEffect(() => {
@@ -91,11 +87,33 @@ export default function TableManagerModal({ isOpen, onOpenChange }: TableManager
           toast({ title: "Etiqueta adicionada com sucesso!"});
       }
   }
+
+  const handleAddColumn = () => {
+    if (!newColumnName.trim()) return;
+    addColumn(newColumnName, newColumnType);
+    setNewColumnName("");
+    toast({ title: "Coluna adicionada com sucesso!" });
+  };
   
   const handleColumnVisibilityChange = (columnId: string, checked: boolean) => {
     setLocalVisibleColumns(prev => 
         checked ? [...prev, columnId] : prev.filter(id => id !== columnId)
     );
+  };
+
+  const handleStartEditing = (column: { id: string, name: string, type: ColumnType }) => {
+    setEditingColumnId(column.id);
+    setEditingColumnName(column.name);
+    setEditingColumnType(column.type);
+  };
+
+  const handleConfirmEdit = () => {
+    if (editingColumnId && editingColumnName.trim()) {
+      updateColumn(editingColumnId, editingColumnName, editingColumnType);
+      setEditingColumnId(null);
+      setEditingColumnName("");
+      toast({ title: "Coluna atualizada com sucesso!" });
+    }
   };
 
   return (
@@ -114,18 +132,77 @@ export default function TableManagerModal({ isOpen, onOpenChange }: TableManager
           </TabsList>
           
           <TabsContent value="columns" className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
-            <h4 className="font-semibold">Visibilidade das Colunas</h4>
-            <div className="grid grid-cols-2 gap-4">
-                {DEFAULT_COLUMNS.map(col => (
-                    <div key={col.id} className="flex items-center space-x-2">
-                        <Checkbox 
-                            id={col.id} 
-                            checked={localVisibleColumns.includes(col.id)}
-                            onCheckedChange={(checked) => handleColumnVisibilityChange(col.id, !!checked)}
-                        />
-                        <Label htmlFor={col.id}>{col.name}</Label>
+            <h4 className="font-semibold">Gerenciar Colunas</h4>
+            <div className="grid grid-cols-1 gap-4">
+                {columns.map(col => (
+                    <div key={col.id} className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox 
+                                id={col.id} 
+                                checked={localVisibleColumns.includes(col.id)}
+                                onCheckedChange={(checked) => handleColumnVisibilityChange(col.id, !!checked)}
+                            />
+                            {editingColumnId === col.id ? (
+                                <Input 
+                                    value={editingColumnName}
+                                    onChange={(e) => setEditingColumnName(e.target.value)}
+                                    onBlur={handleConfirmEdit}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleConfirmEdit()}
+                                    autoFocus
+                                />
+                            ) : (
+                                <Label htmlFor={col.id}>{col.name}</Label>
+                            )}
+                        </div>
+                        <div className="flex items-center">
+                           {editingColumnId === col.id ? (
+                                <Select value={editingColumnType} onValueChange={(value) => setEditingColumnType(value as ColumnType)}>
+                                    <SelectTrigger className="w-[120px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="text">Texto</SelectItem>
+                                        <SelectItem value="number">Número</SelectItem>
+                                        <SelectItem value="date">Data</SelectItem>
+                                        <SelectItem value="progress">Progresso</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <Label className="text-sm text-muted-foreground w-[120px] text-right">{col.type}</Label>
+                            )}
+                            {editingColumnId === col.id ? (
+                                <Button variant="ghost" size="icon" onClick={handleConfirmEdit}>
+                                    <Check className="h-4 w-4" />
+                                </Button>
+                            ) : (
+                                <Button variant="ghost" size="icon" onClick={() => handleStartEditing(col)}>
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => duplicateColumn(col.id)}>
+                                <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => deleteColumn(col.id)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
                 ))}
+            </div>
+            <div className="flex items-center gap-2 pt-4 border-t">
+                <Input placeholder="Nova coluna..." value={newColumnName} onChange={(e) => setNewColumnName(e.target.value)} />
+                <Select value={newColumnType} onValueChange={(value) => setNewColumnType(value as ColumnType)}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="text">Texto</SelectItem>
+                        <SelectItem value="number">Número</SelectItem>
+                        <SelectItem value="date">Data</SelectItem>
+                        <SelectItem value="progress">Progresso</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button onClick={handleAddColumn}><PlusCircle className="h-4 w-4 mr-2"/>Adicionar</Button>
             </div>
           </TabsContent>
 

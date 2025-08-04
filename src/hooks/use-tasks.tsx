@@ -32,8 +32,9 @@ interface TasksContextType {
   selectedProjectId: string | null;
   setSelectedProjectId: (projectId: string | null) => void;
   refetchTasks: () => void;
-  addTask: (taskData: Partial<Task>) => Promise<boolean>;
+  addTask: (taskData: Partial<Task> & { tag_ids?: string[] }) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
+  setParentTask: (taskIds: string[], parentId: string) => Promise<boolean>;
 }
 
 const TasksContext = createContext<TasksContextType | undefined>(undefined);
@@ -74,8 +75,23 @@ export const TasksProvider = ({ children }: { children: ReactNode }) => {
   // Usar useMemo para aninhar as tarefas apenas quando a lista plana mudar
   const tasks = useMemo(() => nestTasks(rawTasks), [rawTasks]);
 
-  const addTask = async (taskData: Partial<Task>): Promise<boolean> => {
-    const { error } = await supabase.from('tasks').insert([taskData]);
+  const addTask = async (taskData: Partial<Task> & { tag_ids?: string[] }): Promise<boolean> => {
+    const { tag_ids, ...rest } = taskData;
+    const { error } = await supabase.rpc('insert_task_with_tags', {
+      p_project_id: rest.project_id,
+      p_name: rest.name,
+      p_description: rest.description,
+      p_assignee_id: rest.assignee_id,
+      p_status_id: rest.status_id,
+      p_priority: rest.priority,
+      p_progress: rest.progress,
+      p_start_date: rest.start_date,
+      p_end_date: rest.end_date,
+      p_parent_id: rest.parent_id,
+      p_dependencies: rest.dependencies,
+      p_tag_ids: tag_ids,
+    });
+    
     if (error) {
       toast({ title: "Erro ao adicionar tarefa", description: error.message, variant: "destructive" });
       return false;
@@ -96,6 +112,22 @@ export const TasksProvider = ({ children }: { children: ReactNode }) => {
     return true;
   };
 
+  const setParentTask = async (taskIds: string[], parentId: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ parent_id: parentId })
+      .in('id', taskIds);
+
+    if (error) {
+      toast({ title: "Erro ao definir tarefa pai", description: error.message, variant: "destructive" });
+      return false;
+    }
+
+    toast({ title: "Tarefa pai definida com sucesso!" });
+    fetchTasks();
+    return true;
+  };
+
   const contextValue = {
     tasks, // Fornecer a lista aninhada
     loading,
@@ -104,6 +136,7 @@ export const TasksProvider = ({ children }: { children: ReactNode }) => {
     refetchTasks: fetchTasks,
     addTask,
     deleteTask,
+    setParentTask,
   };
 
   return (
