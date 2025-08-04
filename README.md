@@ -1,43 +1,86 @@
-# To Sabendo - Gestão de Projetos Inteligente
+# To Sabendo - Gerenciador de Projetos com IA
 
-Uma aplicação full-stack de gestão de projetos construída com Next.js, TypeScript, Supabase e Genkit. Desenvolvida para ser robusta, interativa e inteligente, com um sistema de permissões granular e seguro.
+Bem-vindo ao **To Sabendo**, um gerenciador de projetos de código aberto construído com Next.js, Supabase e Tailwind CSS, projetado para ser uma plataforma robusta e extensível para gestão de projetos, tarefas e equipes.
 
-## Estado Atual do Projeto
+## Visão Geral
 
-O projeto atingiu um estágio maduro de desenvolvimento, com um conjunto robusto de funcionalidades para todos os perfis de usuário. O grande diferencial é a integração profunda com IA e as capacidades avançadas de visualização e customização de dados, tudo isso sustentado por uma arquitetura de segurança não-recursiva no backend.
+Este projeto fornece uma base sólida para a construção de um sistema de gerenciamento de projetos completo, com funcionalidades que incluem:
 
-## Funcionalidades Principais
--   **Segurança Granular (RLS)**: Arquitetura de permissões robusta que garante que cada perfil (Admin, Gerente, Membro) acesse apenas os dados permitidos.
--   **Tabela de Tarefas Avançada**: Uma EAP (WBS) completa com visualização hierárquica (subtarefas retráteis), filtros dinâmicos, seleção múltipla e ações em massa.
--   **Gerenciamento Completo de Projetos**: Gerentes podem criar, importar de CSV, editar, exportar e excluir projetos, além de gerenciar equipes.
--   **Customização do Fluxo de Trabalho**: Controle total sobre o ambiente, permitindo criar e gerenciar status, etiquetas (tags) e colunas customizadas.
--   **Ferramentas de IA Integradas**: Assistentes para criação de projetos, replanejamento e análise de riscos.
--   **Visualizações Múltiplas**: Quadro Kanban, Gráfico de Gantt e Calendário.
+- **Gestão de Projetos e Tarefas:** Crie e gerencie projetos, tarefas e subtarefas de forma hierárquica.
+- **Colaboração em Equipe:** Adicione colaboradores aos projetos com diferentes níveis de permissão.
+- **Segurança Robusta:** Utiliza o sistema de Row Level Security (RLS) do Supabase para garantir que os usuários acessem apenas os dados que lhes são permitidos.
+- **Autenticação Integrada:** Gerenciamento de usuários e perfis integrado com o Supabase Auth.
+- **Armazenamento Seguro:** Upload e download de anexos em tarefas, com políticas de segurança granulares no Supabase Storage.
 
-## Configuração do Ambiente
+## Setup e Instalação
 
-Siga estes passos para configurar o ambiente de desenvolvimento.
+Para configurar o ambiente de desenvolvimento e executar o projeto, siga os passos abaixo. O processo foi consolidado para ser o mais simples possível.
 
-### Passo 1: Configurar o Supabase
-1.  Crie um novo projeto no site [supabase.com](https://supabase.com).
-2.  Em **Project Settings > API**, copie a **URL** e a chave **`anon`**.
-3.  Na raiz do seu projeto, crie um arquivo chamado `.env.local`.
-4.  Cole a URL e a chave `anon` no seu arquivo `.env.local`, seguindo o formato do arquivo `.env.example`.
+### Pré-requisitos
 
-### Passo 2: Criar Usuários de Teste
-1.  No painel do Supabase, vá para **Authentication > Users** e crie os usuários de teste que desejar (ex: `admin@example.com`, `gp@example.com`, `membro@example.com`).
-2.  Copie o `ID` de cada usuário criado na aba "Users".
+- Conta no [Supabase](https://supabase.com)
+- [Node.js](https://nodejs.org/) (versão 18 ou superior)
+- [npm](https://www.npmjs.com/) (geralmente instalado com o Node.js)
 
-### Passo 3: Configurar e Popular o Banco de Dados
-1.  Abra o arquivo `supabase/setup_final.sql`.
-2.  **No topo do arquivo**, cole os IDs dos usuários que você copiou nas variáveis correspondentes (`admin_user_id`, `gp_user_id`, `member_user_id`).
-3.  Copie **todo o conteúdo** do arquivo `supabase/setup_final.sql`.
-4.  No painel do Supabase, vá para **SQL Editor**, cole o conteúdo e clique em **RUN**.
+### Passo 1: Configurar o Projeto Supabase
 
-Este script único irá criar as tabelas, funções, políticas de segurança e dados iniciais, deixando o banco de dados pronto para uso.
+1.  **Crie um Projeto:** Acesse seu [painel do Supabase](https://supabase.com/dashboard/projects) e crie um novo projeto.
+2.  **Obtenha as Credenciais:** No painel do seu projeto, vá para **Project Settings > API**. Você precisará da **Project URL** e da chave **`anon` public**.
+3.  **Crie um Bucket de Armazenamento:** Vá para a seção **Storage** e crie um novo bucket chamado `tosabendo2`. **Importante:** Mantenha este bucket como **privado**. As políticas de segurança que iremos aplicar garantirão o acesso seguro.
 
-### Passo 4: Rodar a Aplicação
-1.  **Instale as dependências:** `npm install`
-2.  **Rode o projeto:** `npm run dev`
+### Passo 2: Configurar o Ambiente Local
 
-Sua aplicação estará rodando localmente e conectada ao seu projeto Supabase.
+1.  **Clone o Repositório:**
+    ```bash
+    git clone https://github.com/seu-usuario/to-sabendo.git
+    cd to-sabendo
+    ```
+2.  **Instale as Dependências:**
+    ```bash
+    npm install
+    ```
+3.  **Configure as Variáveis de Ambiente:**
+    - Crie um ficheiro `.env.local` na raiz do projeto.
+    - Adicione as credenciais do seu projeto Supabase a este ficheiro:
+      ```env
+      NEXT_PUBLIC_SUPABASE_URL=SUA_PROJECT_URL
+      NEXT_PUBLIC_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLIC
+      ```
+
+### Passo 3: Executar o Script de Setup do Banco de Dados
+
+Toda a configuração do banco de dados (tabelas, funções, políticas de segurança e dados iniciais) foi consolidada em um único script.
+
+1.  **Acesse o SQL Editor:** No painel do seu projeto Supabase, vá para a seção **SQL Editor**.
+2.  **Execute o Script:**
+    - Abra o ficheiro `supabase/setup_consolidado.sql` que se encontra neste repositório.
+    - Copie todo o conteúdo do ficheiro.
+    - Cole o conteúdo no SQL Editor e clique em **"Run"**.
+
+**Importante:** O script de seed (dados iniciais) está configurado com IDs de usuário de exemplo. Para que os dados de exemplo (projetos, tarefas) sejam associados corretamente, você precisará:
+1.  Criar os usuários no painel de **Authentication > Users** do Supabase.
+2.  Copiar os IDs desses usuários.
+3.  Colar os IDs nos locais indicados na **PART 6** do script `setup_consolidado.sql` antes de o executar.
+
+### Passo 4: Executar a Aplicação
+
+Com o backend configurado, você pode iniciar o servidor de desenvolvimento:
+
+```bash
+npm run dev
+```
+
+Abra [http://localhost:3000](http://localhost:3000) no seu navegador para ver a aplicação em funcionamento.
+
+## Arquitetura de Segurança
+
+A segurança é um pilar deste projeto, garantida por várias camadas:
+
+- **Row Level Security (RLS):** Todas as tabelas principais têm políticas de RLS ativas, garantindo que as consultas (mesmo as feitas diretamente do cliente) só retornem os dados permitidos.
+- **Funções `SECURITY DEFINER`:** Funções auxiliares críticas são executadas com os privilégios do criador da função, permitindo verificações de permissão seguras sem expor a lógica ao cliente.
+- **Políticas de Storage:** O acesso ao bucket de armazenamento é controlado por políticas que verificam se um usuário é membro de um projeto antes de permitir o upload ou download de ficheiros, prevenindo o acesso não autorizado a anexos.
+- **Tabela `profiles`:** Os dados públicos dos usuários são armazenados numa tabela `profiles`, separada da tabela `auth.users` do Supabase, seguindo as melhores práticas de segurança e evitando a exposição de dados sensíveis.
+
+---
+
+Agradecemos o seu interesse no To Sabendo! Se encontrar algum problema ou tiver sugestões, por favor, abra uma issue.

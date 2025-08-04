@@ -1,7 +1,7 @@
 -- =============================================================================
---  SETUP CONSOLIDADO E DEFINITIVO DO BANCO DE DADOS (V17)
+--  SETUP CONSOLIDADO E DEFINITIVO DO BANCO DE DADOS (V18)
 --  Este script mestre executa todas as etapas para configurar o banco de dados
---  e o storage do zero, incorporando todas as correções.
+--  e o storage do zero, incorporando todas as correções. É idempotente.
 -- =============================================================================
 
 -- ========= PART 1: SCHEMA (TIPOS, TABELAS) =========
@@ -176,7 +176,7 @@ ALTER TABLE public.task_observations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.task_statuses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
 
--- Apagar políticas antigas para um estado limpo
+-- Apagar políticas antigas para um estado limpo (idempotência)
 DROP POLICY IF EXISTS "Allow authenticated users to read profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Allow users to update their own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Allow read access to project members and admins" ON public.projects;
@@ -202,13 +202,23 @@ CREATE POLICY "Allow admins full access" ON public.collaborators FOR ALL USING (
 
 CREATE POLICY "Allow project members to manage tasks" ON public.tasks FOR ALL USING (project_id = ANY(public.get_my_projects()) OR public.get_my_role() = 'Admin');
 
-CREATE POLICY "Allow members to manage observations" ON public.task_observations FOR ALL USING (project_id = ANY(public.get_my_projects()) OR public.get_my_role() = 'Admin');
+-- <<<<<<<<<<<<<<<<<<<<<<< CORREÇÃO DEFINITIVA AQUI <<<<<<<<<<<<<<<<<<<<<<<
+CREATE POLICY "Allow members to manage observations" ON public.task_observations
+FOR ALL USING (
+  (get_my_role() = 'Admin') OR
+  EXISTS (
+    SELECT 1
+    FROM public.tasks t
+    WHERE t.id = task_observations.task_id AND t.project_id = ANY(public.get_my_projects())
+  )
+);
+-- <<<<<<<<<<<<<<<<<<<<<<< FIM DA CORREÇÃO <<<<<<<<<<<<<<<<<<<<<<<
 
 CREATE POLICY "Allow read access to all authenticated users" ON public.task_statuses FOR SELECT USING (true);
-CREATE POLICY "Allow admins to manage" ON public.task_statuses FOR ALL USING (public.get_my_role() = 'Admin');
+CREATE POLICY "Allow admins to manage" ON public.task_statuses FOR ALL USING (public.get_my_role() IN ('Admin', 'Gerente'));
 
 CREATE POLICY "Allow read access to all authenticated users" ON public.tags FOR SELECT USING (true);
-CREATE POLICY "Allow admins to manage" ON public.tags FOR ALL USING (public.get_my_role() = 'Admin');
+CREATE POLICY "Allow admins to manage" ON public.tags FOR ALL USING (public.get_my_role() IN ('Admin', 'Gerente'));
 
 
 -- ========= PART 5: POLÍTICAS DE STORAGE =========
@@ -243,22 +253,25 @@ CREATE POLICY "Allow project members to upload files" ON storage.objects FOR INS
 
 
 -- ========= PART 6: DADOS INICIAIS (SEED) =========
+-- IMPORTANTE: Substitua os UUIDs abaixo pelos IDs dos seus usuários criados no painel de Autenticação do Supabase.
 DO $$
 DECLARE
-    admin_user_id  uuid := '5a18de86-1c6d-4120-bd94-e61544d811b7';
-    gp_user_id     uuid := 'a25b2ad6-1bf3-404a-a127-9ec841bf44b3';
-    member_user_id uuid := 'c7b2f1cb-ded8-4c0c-ad58-608dcfe03e1a';
+    admin_user_id  uuid := 'COLE_O_ID_DO_SEU_USUARIO_ADMIN_AQUI';
+    gp_user_id     uuid := 'COLE_O_ID_DO_SEU_USUARIO_GERENTE_AQUI';
+    member_user_id uuid := 'COLE_O_ID_DO_SEU_USUARIO_MEMBRO_AQUI';
 BEGIN
-    -- Sincronizar utilizadores existentes
+    -- Sincronizar utilizadores existentes da tabela auth.users
     INSERT INTO public.profiles (id, name, avatar_url, role)
     SELECT id, raw_user_meta_data->>'name', raw_user_meta_data->>'avatar_url', COALESCE(raw_user_meta_data->>'role', 'Colaborador')
     FROM auth.users
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name,
+      avatar_url = EXCLUDED.avatar_url;
 
     -- Garantir os roles corretos para os utilizadores do seed
     UPDATE public.profiles SET role = 'Admin' WHERE id = admin_user_id;
     UPDATE public.profiles SET role = 'Gerente' WHERE id = gp_user_id;
-    UPDATE public.profiles SET role = 'Membro' WHERE id = member_user_id;
+    UPDATE public.profiles SET role = 'Colaborador' WHERE id = member_user_id;
 END $$;
 
-SELECT 'SETUP CONSOLIDADO E DEFINITIVO (V17) APLICADO COM SUCESSO!';
+SELECT 'SETUP CONSOLIDADO E DEFINITIVO (V18) APLICADO COM SUCESSO!';
