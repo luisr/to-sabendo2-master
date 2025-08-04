@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,22 +14,31 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Project } from "@/lib/types";
 
-interface AddProjectModalProps {
+interface EditProjectModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (project: Omit<Project, "id" | "created_at">) => void;
+  onSave: (id: string, project: Omit<Project, "id" | "created_at">) => void;
+  project: Project;
 }
 
-export default function AddProjectModal({
+export default function EditProjectModal({
   isOpen,
   onOpenChange,
   onSave,
-}: AddProjectModalProps) {
+  project,
+}: EditProjectModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
+  useEffect(() => {
+    if (project) {
+      setName(project.name);
+      setDescription(project.description || "");
+    }
+  }, [project]);
+
   const handleSave = () => {
-    onSave({ name, description });
+    onSave(project.id, { name, description });
     onOpenChange(false);
   };
 
@@ -37,9 +46,9 @@ export default function AddProjectModal({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo Projeto</DialogTitle>
+          <DialogTitle>Editar Projeto</DialogTitle>
           <DialogDescription>
-            Preencha os detalhes do novo projeto.
+            Faça alterações no seu projeto aqui.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4 space-y-4">
@@ -65,7 +74,7 @@ export default function AddProjectModal({
             Cancelar
           </Button>
           <Button onClick={handleSave} disabled={!name}>
-            Salvar
+            Salvar Alterações
           </Button>
         </DialogFooter>
       </DialogContent>

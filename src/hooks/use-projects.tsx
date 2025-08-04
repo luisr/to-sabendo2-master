@@ -1,16 +1,16 @@
 "use client";
-
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
-import type { Project, User } from "@/lib/types";
+import type { Project } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { useUsers } from "./use-users";
 
 interface ProjectsContextType {
   projects: Project[];
   loading: boolean;
-  addProject: (projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>) => Promise<Project | null>;
-  deleteProject: (projectId: string) => Promise<boolean>;
+  refetchProjects: () => void;
+  addProject: (project: Omit<Project, 'id' | 'created_at'>) => Promise<void>;
+  updateProject: (id: string, updates: Omit<Project, 'id' | 'created_at'>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined);
@@ -19,73 +19,54 @@ export const ProjectsProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { toast } = useToast();
-  const { user } = useUsers();
 
-  const fetchProjects = useCallback(async (currentUser: User) => {
-    console.log(`[fetchProjects] Iniciando busca de projetos para o usuário ${currentUser.email} com o papel: ${currentUser.role}`);
+  const fetchProjects = useCallback(async () => {
     setLoading(true);
-    let response;
-
-    if (currentUser.role === 'Admin') {
-      console.log("[fetchProjects] Executando lógica de Admin...");
-      response = await supabase.from('projects').select('*'); // Admins veem todos os projetos
-    } else if (currentUser.role === 'Gerente') {
-      console.log("[fetchProjects] Executando lógica de Gerente...");
-      response = await supabase.rpc('get_managed_projects', { p_user_id: currentUser.id });
-    } else { // Membro
-      console.log("[fetchProjects] Executando lógica de Membro...");
-      response = await supabase
-        .from('projects')
-        .select('*, collaborators!inner(user_id)')
-        .eq('collaborators.user_id', currentUser.id);
-    }
-
-    const { data, error } = response;
-    console.log("[fetchProjects] Resposta do Supabase:", { data, error });
-
+    const { data, error } = await supabase.from('projects').select('*');
     if (error) {
-      toast({ title: "Erro ao buscar projetos", description: error.message, variant: 'destructive' });
-      setProjects([]);
+      toast({ title: "Erro ao carregar projetos", description: error.message, variant: "destructive" });
     } else {
-      console.log("[fetchProjects] Projetos recebidos:", data);
-      setProjects(data || []);
+      setProjects(data);
     }
     setLoading(false);
   }, [toast]);
 
   useEffect(() => {
-    if (user) {
-      fetchProjects(user);
+    fetchProjects();
+  }, [fetchProjects]);
+
+  const addProject = async (project: Omit<Project, 'id' | 'created_at'>) => {
+    const { error } = await supabase.from('projects').insert(project);
+    if (error) {
+      toast({ title: "Erro ao adicionar projeto", description: error.message, variant: "destructive" });
     } else {
-      setProjects([]);
-      setLoading(false);
+      toast({ title: "Projeto adicionado com sucesso!" });
+      fetchProjects();
     }
-  }, [user, fetchProjects]);
-
-  const addProject = async (projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>) => {
-    const { data, error } = await supabase.from('projects').insert(projectData).select().single();
-    if (error) {
-        toast({ title: "Erro ao criar projeto", description: error.message, variant: 'destructive' });
-        return null;
-    }
-    if (user) await fetchProjects(user);
-    return data;
   };
 
-  const deleteProject = async (projectId: string) => {
-    const { error } = await supabase.from('projects').delete().eq('id', projectId);
+  const updateProject = async (id: string, updates: Omit<Project, 'id' | 'created_at'>) => {
+    const { error } = await supabase.from('projects').update(updates).eq('id', id);
     if (error) {
-        toast({ title: "Erro ao excluir projeto", description: error.message, variant: 'destructive' });
-        return false;
+      toast({ title: "Erro ao atualizar projeto", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Projeto atualizado com sucesso!" });
+      fetchProjects();
     }
-    if (user) await fetchProjects(user);
-    return true;
   };
 
-  const contextValue = { projects, loading, addProject, deleteProject };
+  const deleteProject = async (id: string) => {
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) {
+      toast({ title: "Erro ao excluir projeto", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Projeto excluído com sucesso!" });
+      fetchProjects();
+    }
+  };
 
   return (
-    <ProjectsContext.Provider value={contextValue}>
+    <ProjectsContext.Provider value={{ projects, loading, refetchProjects: fetchProjects, addProject, updateProject, deleteProject }}>
       {children}
     </ProjectsContext.Provider>
   );
