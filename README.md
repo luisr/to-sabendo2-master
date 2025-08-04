@@ -19,21 +19,22 @@ O projeto atingiu um estágio maduro de desenvolvimento, com um conjunto robusto
 Siga estes passos para configurar o ambiente de desenvolvimento.
 
 ### Passo 1: Configurar o Supabase
-1.  Crie seu projeto no site [supabase.com](https://supabase.com).
+1.  Crie um novo projeto no site [supabase.com](https://supabase.com).
 2.  Em **Project Settings > API**, copie a **URL** e a chave **`anon`**.
-3.  Na raiz do seu projeto, copie o arquivo `.env.example` para um novo arquivo chamado `.env.local`.
-4.  Cole a URL e a chave `anon` no seu arquivo `.env.local`.
+3.  Na raiz do seu projeto, crie um arquivo chamado `.env.local`.
+4.  Cole a URL e a chave `anon` no seu arquivo `.env.local`, seguindo o formato do arquivo `.env.example`.
 
-### Passo 2: Configurar o Banco de Dados (Método Único)
-No **SQL Editor** do seu painel Supabase, execute o conteúdo do seguinte arquivo:
-
-1.  **`supabase/setup-production.sql`**: Este é o único script necessário. Ele limpa, cria o schema, define as funções e aplica todas as políticas de segurança (RLS) de uma só vez.
-
-### Passo 3: Criar Usuários e Popular o Banco (Seeding)
-1.  Crie os usuários de teste (ex: `admin@example.com`, `gp@example.com`) na seção **Authentication** do seu painel Supabase.
+### Passo 2: Criar Usuários de Teste
+1.  No painel do Supabase, vá para **Authentication > Users** e crie os usuários de teste que desejar (ex: `admin@example.com`, `gp@example.com`, `membro@example.com`).
 2.  Copie o `ID` de cada usuário criado na aba "Users".
-3.  Abra o arquivo `supabase/seed.sql`, cole os IDs nas variáveis correspondentes no topo do arquivo.
-4.  Execute o `seed.sql` no **SQL Editor** para popular o banco com dados de exemplo (projetos, tarefas, etc.).
+
+### Passo 3: Configurar e Popular o Banco de Dados
+1.  Abra o arquivo `supabase/setup_final.sql`.
+2.  **No topo do arquivo**, cole os IDs dos usuários que você copiou nas variáveis correspondentes (`admin_user_id`, `gp_user_id`, `member_user_id`).
+3.  Copie **todo o conteúdo** do arquivo `supabase/setup_final.sql`.
+4.  No painel do Supabase, vá para **SQL Editor**, cole o conteúdo e clique em **RUN**.
+
+Este script único irá criar as tabelas, funções, políticas de segurança e dados iniciais, deixando o banco de dados pronto para uso.
 
 ### Passo 4: Rodar a Aplicação
 1.  **Instale as dependências:** `npm install`

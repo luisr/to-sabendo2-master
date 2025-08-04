@@ -1,21 +1,15 @@
 "use client";
-import { useState, useMemo, forwardRef, Fragment, useRef } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { MoreHorizontal, PlusCircle, Settings, Trash2, ChevronRight, Loader2, Printer, Eye, MessageSquare, Edit } from 'lucide-react';
+import { MoreHorizontal, ChevronRight, Loader2, Eye, MessageSquare, Edit, Trash2 } from 'lucide-react';
 import type { Task, Tag, User } from '@/lib/types';
 import { Progress } from '../ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useTableSettings } from '@/hooks/use-table-settings';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useReactToPrint } from 'react-to-print';
-import TableManagerModal from './table-manager-modal';
-import AddTaskModal from './add-task-modal';
 
-// O TaskRow permanece simples, apenas chamando as funções que recebe.
 const TaskRow = ({ task, onSelect, isSelected, columns, isManager, onEditTask, expanded, onToggleExpand, hasSubtasks, onDeleteTask, onViewTask, onOpenObservations }: any) => {
     const renderCell = (task: Task, columnId: string) => {
         switch (columnId) {
@@ -47,43 +41,36 @@ const TaskRow = ({ task, onSelect, isSelected, columns, isManager, onEditTask, e
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => onViewTask(task)}><Eye className="mr-2 h-4 w-4" />Visualizar</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onOpenObservations(task)}><MessageSquare className="mr-2 h-4 w-4" />Observações</DropdownMenuItem>
+                                <DropdownMenuItem onClick={onViewTask}><Eye className="mr-2 h-4 w-4" />Visualizar</DropdownMenuItem>
+                                <DropdownMenuItem onClick={onOpenObservations}><MessageSquare className="mr-2 h-4 w-4" />Observações</DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => onEditTask(task)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onDeleteTask(task.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
+                                <DropdownMenuItem onClick={onEditTask}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
+                                <DropdownMenuItem onClick={onDeleteTask} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </TableCell>
                 )}
             </TableRow>
              {expanded && task.subtasks?.map((subtask: Task) => (
-                <TaskRow key={subtask.id} task={subtask} onSelect={() => {}} isSelected={false} columns={columns} isManager={isManager} onEditTask={onEditTask} onDeleteTask={onDeleteTask} onViewTask={onViewTask} onOpenObservations={onOpenObservations} expanded={false} onToggleExpand={() => {}} hasSubtasks={false} />
+                <TaskRow key={subtask.id} task={subtask} onSelect={() => {}} isSelected={false} columns={columns} isManager={isManager} onEditTask={() => onEditTask(subtask)} onDeleteTask={() => onDeleteTask(subtask.id)} onViewTask={() => onViewTask(subtask)} onOpenObservations={() => onOpenObservations(subtask)} expanded={false} onToggleExpand={() => {}} hasSubtasks={false} />
             ))}
         </Fragment>
     );
 };
 
-// **ARQUITETURA CORRIGIDA: Props explícitas para cada ação.**
+// **ARQUITETURA FINAL: Componente funcional simples, sem forwardRef.**
 interface TableViewProps {
     tasks: Task[]; users: User[];
-    onAddTask: () => void; // Apenas notifica para abrir o modal.
-    onEditTask: (task: Task) => void;
-    onViewTask: (task: Task) => void;
-    onOpenObservations: (task: Task) => void;
-    deleteTask: (taskId: string) => Promise<boolean>;
-    loading: boolean; isManager: boolean; selectedProjectId: string | null;
+    onEditTask: (task: Task) => void; onViewTask: (task: Task) => void;
+    onOpenObservations: (task: Task) => void; deleteTask: (taskId: string) => Promise<boolean>;
+    loading: boolean; isManager: boolean;
+    printSectionRef: React.RefObject<HTMLDivElement>; // **A ref é recebida como uma prop normal.**
 }
 
-const TableView = forwardRef<HTMLDivElement, TableViewProps>(({ tasks, users, onAddTask, onEditTask, onViewTask, onOpenObservations, deleteTask, loading, isManager, selectedProjectId }, ref) => {
-    const { tags: allTags, visibleColumns } = useTableSettings();
+const TableView = ({ tasks, users, onEditTask, onViewTask, onOpenObservations, deleteTask, loading, isManager, printSectionRef }: TableViewProps) => {
+    const { visibleColumns } = useTableSettings();
     const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
-    const [filterText, setFilterText] = useState("");
-    const [filterTags, setFilterTags] = useState<string[]>([]);
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-    const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
-    const printRef = useRef(null);
-    const handlePrint = useReactToPrint({ content: () => printRef.current });
 
     const columns = useMemo(() => [
         { id: 'project_name', name: 'Projeto' }, { id: 'assignee', name: 'Responsável' }, { id: 'status', name: 'Status' },
@@ -93,8 +80,8 @@ const TableView = forwardRef<HTMLDivElement, TableViewProps>(({ tasks, users, on
 
     const filteredTasks = useMemo(() => {
         if (!Array.isArray(tasks)) return [];
-        return tasks.filter(task => task.name.toLowerCase().includes(filterText.toLowerCase()) && (filterTags.length === 0 || (task.tags || []).some(tag => tag && filterTags.includes(tag.id))) && !task.parent_id);
-    }, [tasks, filterText, filterTags]);
+        return tasks.filter(task => !task.parent_id);
+    }, [tasks]);
 
     const handleSelectAll = (checked: boolean) => {
         const newSelectedTasks = new Set<string>();
@@ -114,54 +101,40 @@ const TableView = forwardRef<HTMLDivElement, TableViewProps>(({ tasks, users, on
         setExpandedRows(newExpandedRows);
     };
     
-    const isConsolidatedView = selectedProjectId === 'consolidated';
-
     return (
-        <>
-            <div className="flex justify-between items-center mb-4">
-                 <div className="flex items-center gap-2"> {/* Filtros */} </div>
-                <div className="flex gap-2">
-                    {!isConsolidatedView && isManager && (<Button variant="outline" size="sm" onClick={onAddTask}><PlusCircle className="h-4 w-4 mr-2" />Adicionar Tarefa</Button>)}
-                    <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-2" />Imprimir</Button>
-                    {isManager && (<Button variant="outline" size="sm" onClick={() => setIsManagerModalOpen(true)}><Settings className="h-4 w-4 mr-2" />Gerenciar Tabela</Button>)}
-                </div>
-            </div>
-            
-            <div className="border rounded-md overflow-x-auto" ref={ref}>
-                <div ref={printRef}>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[80px]"><Checkbox checked={selectedTasks.size > 0 && selectedTasks.size === filteredTasks.length} onCheckedChange={(checked) => handleSelectAll(!!checked)} /></TableHead>
-                                <TableHead>Nome</TableHead>
-                                {columns.map(col => <TableHead key={col.id}>{col.name}</TableHead>)}
-                                {isManager && <TableHead>Ações</TableHead>}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                             {loading ? (
-                                <TableRow><TableCell colSpan={columns.length + 3} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
-                            ) : filteredTasks.length > 0 ? (
-                                filteredTasks.map(task => (
-                                    <TaskRow
-                                        key={task.id} task={task} onSelect={(isChecked: boolean) => handleSelectRow(task.id, isChecked)}
-                                        isSelected={selectedTasks.has(task.id)} columns={columns} isManager={isManager}
-                                        onEditTask={onEditTask} onDeleteTask={deleteTask} onViewTask={onViewTask}
-                                        onOpenObservations={onOpenObservations} expanded={expandedRows.has(task.id)}
-                                        onToggleExpand={() => toggleExpand(task.id)} hasSubtasks={task.subtasks && task.subtasks.length > 0}
-                                    />
-                                ))
-                            ) : (
-                                <TableRow><TableCell colSpan={columns.length + 3} className="h-24 text-center">Nenhuma tarefa encontrada.</TableCell></TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </div>
-            {/* **NENHUM MODAL DE TAREFA É RENDERIZADO AQUI.** A PÁGINA PAI AGORA É RESPONSÁVEL.*/}
-            <TableManagerModal isOpen={isManagerModalOpen} onOpenChange={setIsManagerModalOpen} />
-        </>
+        <div ref={printSectionRef} className="border rounded-md overflow-x-auto">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-[80px]"><Checkbox checked={selectedTasks.size > 0 && selectedTasks.size === filteredTasks.length} onCheckedChange={(checked) => handleSelectAll(!!checked)} /></TableHead>
+                        <TableHead>Nome</TableHead>
+                        {columns.map(col => <TableHead key={col.id}>{col.name}</TableHead>)}
+                        {isManager && <TableHead>Ações</TableHead>}
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                     {loading ? (
+                        <TableRow><TableCell colSpan={columns.length + 3} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
+                    ) : filteredTasks.length > 0 ? (
+                        filteredTasks.map(task => (
+                            <TaskRow
+                                key={task.id} task={task} onSelect={(isChecked: boolean) => handleSelectRow(task.id, isSelected)}
+                                isSelected={selectedTasks.has(task.id)} columns={columns} isManager={isManager}
+                                onEditTask={() => onEditTask(task)}
+                                onDeleteTask={() => deleteTask(task.id)}
+                                onViewTask={() => onViewTask(task)}
+                                onOpenObservations={() => onOpenObservations(task)}
+                                expanded={expandedRows.has(task.id)}
+                                onToggleExpand={() => toggleExpand(task.id)} hasSubtasks={task.subtasks && task.subtasks.length > 0}
+                            />
+                        ))
+                    ) : (
+                        <TableRow><TableCell colSpan={columns.length + 3} className="h-24 text-center">Nenhuma tarefa encontrada.</TableCell></TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </div>
     );
-});
-TableView.displayName = "TableView";
+};
+
 export default TableView;

@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, useRef } from "react";
 import dynamic from 'next/dynamic';
+import { useReactToPrint } from 'react-to-print';
 import PageHeader from "@/components/shared/page-header";
 import ProjectSelector from "@/components/shared/project-selector";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { PlusCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TableView from "@/components/projects/table-view";
 import KanbanBoard from "@/components/projects/kanban-board";
+import TableHeaderActions from "@/components/projects/table-header-actions";
 import { useTasks } from "@/hooks/use-tasks";
 import { useProjects } from "@/hooks/use-projects";
 import { useUsers } from "@/hooks/use-users";
@@ -19,6 +21,7 @@ import AddTaskModal from "@/components/projects/add-task-modal";
 import EditTaskModal from "@/components/projects/edit-task-modal";
 import ViewTaskModal from "@/components/projects/view-task-modal";
 import TaskObservationsModal from "@/components/projects/task-observations-modal";
+import TableManagerModal from "@/components/projects/table-manager-modal";
 
 const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false });
 const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false });
@@ -35,6 +38,10 @@ const AdminProjectsPageContent = () => {
     const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
     const [taskToView, setTaskToView] = useState<Task | null>(null);
     const [taskForObservations, setTaskForObservations] = useState<Task | null>(null);
+    const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
+
+    const printRef = useRef<HTMLDivElement>(null);
+    const handlePrint = useReactToPrint({ content: () => printRef.current });
 
     useEffect(() => {
         setSelectedProjectId('consolidated');
@@ -77,15 +84,22 @@ const AdminProjectsPageContent = () => {
                         <TabsTrigger value="gantt" disabled={isConsolidatedView}>Gantt</TabsTrigger>
                         <TabsTrigger value="wbs" disabled={isConsolidatedView}>EAP</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="table" className="flex-1 overflow-y-auto">
+                    <TabsContent value="table" className="flex-1 flex flex-col">
+                        <TableHeaderActions
+                           isManager={true}
+                           isConsolidatedView={isConsolidatedView}
+                           onAddTask={() => setIsAddTaskModalOpen(true)}
+                           onPrint={handlePrint}
+                           onOpenManager={() => setIsManagerModalOpen(true)}
+                        />
                         <TableView 
+                            ref={printRef}
                             tasks={tasks} users={users}
-                            onAddTask={() => setIsAddTaskModalOpen(true)}
                             onEditTask={setTaskToEdit}
                             onViewTask={setTaskToView}
                             onOpenObservations={setTaskForObservations}
                             deleteTask={deleteTask}
-                            loading={tasksLoading} isManager={true} selectedProjectId={selectedProjectId}
+                            loading={tasksLoading} isManager={true}
                         />
                     </TabsContent>
                     <TabsContent value="board" className="flex-1 overflow-y-auto">
@@ -102,9 +116,10 @@ const AdminProjectsPageContent = () => {
 
             <AddProjectModal isOpen={isAddProjectModalOpen} onOpenChange={(isOpen) => { setAddProjectModalOpen(isOpen); if (!isOpen) setProjectToEdit(null); }} onSaveProject={() => {}} projectToEdit={projectToEdit} />
             <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={tasks} />
-            {taskToEdit && ( <EditTaskModal isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onSave={handleUpdateTask} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} /> )}
-            <ViewTaskModal isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} />
-            <TaskObservationsModal isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} />
+            {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onSave={handleUpdateTask} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} /> )}
+            {taskToView && ( <ViewTaskModal key={`view-${taskToView.id}`} isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} /> )}
+            {taskForObservations && ( <TaskObservationsModal key={`obs-${taskForObservations.id}`} isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} /> )}
+            <TableManagerModal isOpen={isManagerModalOpen} onOpenChange={setIsManagerModalOpen} />
         </div>
     );
 }

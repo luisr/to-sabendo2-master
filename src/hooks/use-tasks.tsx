@@ -84,18 +84,69 @@ export const TasksProvider = ({ children }: { children: ReactNode }) => {
   }, [selectedProjectId, fetchTasks]);
 
   const addTask = async (taskData: Omit<Task, 'id' | 'created_at' | 'wbs_code'>): Promise<Task | null> => {
-    // ... (lógica existente)
+    setLoading(true);
+    // Buscar o WBS Code mais alto para o projeto e calcular o próximo
+    // Esta lógica pode precisar ser implementada em uma edge function ou função de banco de dados para evitar concorrência.
+    // Por enquanto, vamos inserir a tarefa e o WBS code pode ser gerado no banco de dados via trigger/function se configurado.
+
+    const { data, error } = await supabase.from('tasks').insert(taskData).select().single();
+
+    if (error) {
+        toast({ title: "Erro ao adicionar tarefa", description: error.message, variant: 'destructive' });
+        setLoading(false);
+        return null;
+    } else if (data) {
+        toast({ title: "Tarefa adicionada!", variant: 'success' });
+        // Refetch as tarefas para incluir a nova e recalcular WBS Codes, se necessário
+        fetchTasks(selectedProjectId);
+        return formatTaskData(data); // Formatar os dados retornados
+    }
+    setLoading(false);
     return null;
   };
 
   const updateTask = async (taskId: string, taskData: Partial<Task>): Promise<boolean> => {
-    // ... (lógica existente)
-    return false;
+    setLoading(true);
+    // Remover campos que não devem ser atualizados diretamente, como wbs_code ou fields related to joins
+    const updatePayload: Partial<Task> = { ...taskData };
+    // Exemplos de campos a remover, ajuste conforme a estrutura exata do seu banco/tipos
+    delete (updatePayload as any).project_name;
+    delete (updatePayload as any).status_name;
+    delete (updatePayload as any).status_color;
+    delete (updatePayload as any).assignee_name;
+    delete (updatePayload as any).tags;
+    // Se wbs_code não deve ser atualizável via este hook:
+    delete (updatePayload as any).wbs_code;
+
+
+    const { error } = await supabase.from('tasks').update(updatePayload).eq('id', taskId);
+
+    if (error) {
+        toast({ title: "Erro ao atualizar tarefa", description: error.message, variant: 'destructive' });
+        setLoading(false);
+        return false;
+    } else {
+        toast({ title: "Tarefa atualizada!", variant: 'success' });
+        // Refetch as tarefas para refletir a mudança
+        fetchTasks(selectedProjectId);
+        return true;
+    }
   };
 
   const deleteTask = async (taskId: string): Promise<boolean> => {
-    // ... (lógica existente)
-    return false;
+    setLoading(true);
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+
+    if (error) {
+        toast({ title: "Erro ao excluir tarefa", description: error.message, variant: 'destructive' });
+        setLoading(false);
+        return false;
+    } else {
+        toast({ title: "Tarefa excluída!", variant: 'success' });
+        // Refetch as tarefas para remover a tarefa excluída
+        fetchTasks(selectedProjectId);
+        return true;
+    }
   };
 
   const contextValue = { tasks, loading, selectedProjectId, setSelectedProjectId, addTask, updateTask, deleteTask, fetchTasks };
