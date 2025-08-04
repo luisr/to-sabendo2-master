@@ -11,10 +11,11 @@ import type { Task, Tag } from "@/lib/types";
 
 interface TaskRowProps {
   task: Task;
+  level: number;
   isSelected: boolean;
   isManager: boolean;
+  currentUserId?: string;
   expanded: boolean;
-  hasSubtasks: boolean;
   visibleColumns: string[];
   onSelect: (checked: boolean) => void;
   onToggleExpand: () => void;
@@ -22,6 +23,7 @@ interface TaskRowProps {
   onOpenObservations: (task: Task) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
+  renderSubtasks: (tasks: Task[], level: number) => React.ReactNode;
 }
 
 const renderCell = (task: Task, columnId: string) => {
@@ -40,10 +42,11 @@ const renderCell = (task: Task, columnId: string) => {
 
 export default function TaskRow({
   task,
+  level,
   isSelected,
   isManager,
+  currentUserId,
   expanded,
-  hasSubtasks,
   visibleColumns,
   onSelect,
   onToggleExpand,
@@ -51,11 +54,16 @@ export default function TaskRow({
   onOpenObservations,
   onEditTask,
   onDeleteTask,
+  renderSubtasks,
 }: TaskRowProps) {
+  const canEdit = isManager || task.assignee_id === currentUserId;
+  const canDelete = isManager;
+  const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+
   return (
     <Fragment>
       <TableRow>
-        <TableCell className="w-[80px]">
+        <TableCell style={{ paddingLeft: `${level * 1.5 + 0.5}rem` }}>
           <div className="flex items-center gap-2">
             <Checkbox checked={isSelected} onCheckedChange={onSelect} />
             {hasSubtasks && (
@@ -69,8 +77,8 @@ export default function TaskRow({
         {visibleColumns.map((col) => (
           <TableCell key={col}>{renderCell(task, col)}</TableCell>
         ))}
-        {isManager && (
-          <TableCell>
+        <TableCell>
+          {(canEdit || canDelete) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -81,31 +89,25 @@ export default function TaskRow({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => onViewTask(task)}><Eye className="mr-2 h-4 w-4" />Visualizar</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onOpenObservations(task)}><MessageSquare className="mr-2 h-4 w-4" />Observações</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onEditTask(task)}><Edit className="mr-2 h-4 w-4" />Editar</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onDeleteTask(task.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" />Excluir</DropdownMenuItem>
+                
+                {(canEdit || canDelete) && <DropdownMenuSeparator />}
+                
+                {canEdit && (
+                  <DropdownMenuItem onClick={() => onEditTask(task)}>
+                    <Edit className="mr-2 h-4 w-4" />Editar
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <DropdownMenuItem onClick={() => onDeleteTask(task.id)} className="text-red-600">
+                    <Trash2 className="mr-2 h-4 w-4" />Excluir
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </TableCell>
-        )}
+          )}
+        </TableCell>
       </TableRow>
-      {expanded && task.subtasks?.map((subtask: Task) => (
-         <TaskRow
-            key={subtask.id}
-            task={subtask}
-            isSelected={false} // Subtasks selection can be handled separately if needed
-            isManager={isManager}
-            expanded={false} // Sub-subtasks not expanded by default
-            hasSubtasks={false} // Assuming one level of nesting for now
-            visibleColumns={visibleColumns}
-            onSelect={() => {}}
-            onToggleExpand={() => {}}
-            onViewTask={onViewTask}
-            onOpenObservations={onOpenObservations}
-            onEditTask={onEditTask}
-            onDeleteTask={onDeleteTask}
-          />
-      ))}
+      {expanded && hasSubtasks && renderSubtasks(task.subtasks, level + 1)}
     </Fragment>
   );
 }

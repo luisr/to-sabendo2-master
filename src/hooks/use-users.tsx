@@ -22,8 +22,9 @@ export const UsersProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const { toast } = useToast();
 
+  // Corrigido: buscar da tabela 'profiles'
   const fetchUsers = useCallback(async () => {
-    const { data, error } = await supabase.from("users").select("*");
+    const { data, error } = await supabase.from("profiles").select("*");
     if (error) {
       console.error("Error fetching users:", error);
       toast({ title: "Erro ao carregar usuários", description: error.message, variant: "destructive" });
@@ -33,9 +34,10 @@ export const UsersProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
+  // Corrigido: buscar da tabela 'profiles'
   const fetchCurrentUser = useCallback(async (sessionUser: any) => {
     const { data, error } = await supabase
-      .from("users")
+      .from("profiles")
       .select("*")
       .eq("id", sessionUser.id)
       .single();
@@ -46,49 +48,42 @@ export const UsersProvider = ({ children }: { children: ReactNode }) => {
     } else {
       setUser(data);
     }
-    // This is the single point of truth for loading completion
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    // Fetch all users once on initial load
     fetchUsers();
-
-    // Set up the listener for authentication state changes
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         fetchCurrentUser(session.user);
       } else {
-        // If the user signs out, clear the user and stop loading
         setUser(null);
         setLoading(false);
       }
     });
 
-    // Perform an initial check of the session when the provider mounts
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         fetchCurrentUser(session.user);
       } else {
-        // If there's no session on mount, we're done loading
         setLoading(false);
       }
     });
 
-    // Cleanup the listener when the component unmounts
     return () => {
       authListener?.subscription.unsubscribe();
     };
   }, [fetchUsers, fetchCurrentUser]);
 
+  // Corrigido: atualizar a tabela 'profiles'
   const updateUser = async (userId: string, updates: Partial<User>): Promise<boolean> => {
-    const { error } = await supabase.from('users').update(updates).eq('id', userId);
+    const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
     if (error) {
         toast({ title: "Erro ao atualizar usuário", description: error.message, variant: "destructive" });
         return false;
     }
     toast({ title: "Usuário atualizado com sucesso!" });
-    await fetchUsers(); // Refetch to update the list
+    await fetchUsers();
     if (user?.id === userId) {
       const { data: sessionData } = await supabase.auth.getSession();
       if(sessionData.session?.user) {

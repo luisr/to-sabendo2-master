@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from 'react';
+import { useState, useMemo, MutableRefObject } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from 'lucide-react';
@@ -12,7 +12,8 @@ interface TableViewProps {
     users: User[];
     loading: boolean;
     isManager: boolean;
-    printSectionRef: (node: HTMLDivElement | null) => void;
+    currentUserId?: string;
+    printSectionRef: MutableRefObject<HTMLDivElement | null>;
     onEditTask: (task: Task) => void;
     onViewTask: (task: Task) => void;
     onOpenObservations: (task: Task) => void;
@@ -23,6 +24,7 @@ export default function TableView({
     tasks,
     loading,
     isManager,
+    currentUserId,
     printSectionRef,
     onEditTask,
     onViewTask,
@@ -45,36 +47,47 @@ export default function TableView({
     ], []);
 
     const filteredVisibleColumns = useMemo(() => columns.filter(c => visibleColumns.includes(c.id)), [columns, visibleColumns]);
-    const topLevelTasks = useMemo(() => tasks.filter(task => !task.parent_id), [tasks]);
 
     const handleSelectAll = (checked: boolean) => {
         const newSelectedTasks = new Set<string>();
         if (checked) {
-            topLevelTasks.forEach((task: Task) => newSelectedTasks.add(task.id));
+            tasks.forEach((task: Task) => newSelectedTasks.add(task.id));
         }
         setSelectedTasks(newSelectedTasks);
+    };
+    
+    const renderTaskRows = (tasksToRender: Task[], level = 0) => {
+        return tasksToRender.map(task => (
+            <TaskRow
+                key={task.id}
+                task={task}
+                level={level}
+                isSelected={selectedTasks.has(task.id)}
+                isManager={isManager}
+                currentUserId={currentUserId}
+                expanded={expandedRows.has(task.id)}
+                visibleColumns={filteredVisibleColumns.map(c => c.id)}
+                onSelect={(isChecked) => {
+                    const newSelectedTasks = new Set(selectedTasks);
+                    if (isChecked) newSelectedTasks.add(task.id);
+                    else newSelectedTasks.delete(task.id);
+                    setSelectedTasks(newSelectedTasks);
+                }}
+                onToggleExpand={() => {
+                    const newExpandedRows = new Set(expandedRows);
+                    if (newExpandedRows.has(task.id)) newExpandedRows.delete(task.id);
+                    else newExpandedRows.add(task.id);
+                    setExpandedRows(newExpandedRows);
+                }}
+                onViewTask={onViewTask}
+                onOpenObservations={onOpenObservations}
+                onEditTask={onEditTask}
+                onDeleteTask={deleteTask}
+                renderSubtasks={renderTaskRows} // Passar a função de renderização para a recursão
+            />
+        ));
     };
 
-    const handleSelectRow = (taskId: string, isSelected: boolean) => {
-        const newSelectedTasks = new Set(selectedTasks);
-        if (isSelected) {
-            newSelectedTasks.add(taskId);
-        } else {
-            newSelectedTasks.delete(taskId);
-        }
-        setSelectedTasks(newSelectedTasks);
-    };
-    
-    const toggleExpand = (taskId: string) => {
-        const newExpandedRows = new Set(expandedRows);
-        if (newExpandedRows.has(taskId)) {
-            newExpandedRows.delete(taskId);
-        } else {
-            newExpandedRows.add(taskId);
-        }
-        setExpandedRows(newExpandedRows);
-    };
-    
     return (
         <div ref={printSectionRef} className="border rounded-md overflow-x-auto flex-1">
             <Table>
@@ -82,36 +95,20 @@ export default function TableView({
                     <TableRow>
                         <TableHead className="w-[80px]">
                             <Checkbox 
-                                checked={selectedTasks.size > 0 && selectedTasks.size === topLevelTasks.length} 
+                                checked={selectedTasks.size > 0 && selectedTasks.size === tasks.length} 
                                 onCheckedChange={(checked) => handleSelectAll(!!checked)} 
                             />
                         </TableHead>
                         <TableHead>Nome</TableHead>
                         {filteredVisibleColumns.map(col => <TableHead key={col.id}>{col.name}</TableHead>)}
-                        {isManager && <TableHead>Ações</TableHead>}
+                        <TableHead>Ações</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                      {loading ? (
                         <TableRow><TableCell colSpan={filteredVisibleColumns.length + 3} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></TableCell></TableRow>
-                    ) : topLevelTasks.length > 0 ? (
-                        topLevelTasks.map(task => (
-                            <TaskRow
-                                key={task.id}
-                                task={task}
-                                isSelected={selectedTasks.has(task.id)}
-                                isManager={isManager}
-                                expanded={expandedRows.has(task.id)}
-                                hasSubtasks={task.subtasks && task.subtasks.length > 0}
-                                visibleColumns={filteredVisibleColumns.map(c => c.id)}
-                                onSelect={(isChecked) => handleSelectRow(task.id, isChecked)}
-                                onToggleExpand={() => toggleExpand(task.id)}
-                                onViewTask={onViewTask}
-                                onOpenObservations={onOpenObservations}
-                                onEditTask={onEditTask}
-                                onDeleteTask={deleteTask}
-                            />
-                        ))
+                    ) : tasks.length > 0 ? (
+                        renderTaskRows(tasks)
                     ) : (
                         <TableRow><TableCell colSpan={filteredVisibleColumns.length + 3} className="h-24 text-center">Nenhuma tarefa encontrada.</TableCell></TableRow>
                     )}

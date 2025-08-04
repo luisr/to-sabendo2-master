@@ -1,6 +1,8 @@
 "use client";
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Settings, Printer } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { User, TaskStatus } from "@/lib/types";
 
 interface TableHeaderActionsProps {
   isManager: boolean;
@@ -8,21 +10,58 @@ interface TableHeaderActionsProps {
   onAddTask: () => void;
   onPrint: () => void;
   onOpenManager: () => void;
-  isLoading: boolean; // Adicionando a prop isLoading
+  isLoading: boolean;
+  // Props para os filtros
+  statuses: TaskStatus[];
+  users: User[];
+  statusFilter: string;
+  onStatusChange: (value: string) => void;
+  userFilter: string;
+  onUserChange: (value: string) => void;
 }
 
-export default function TableHeaderActions({ 
-  isManager, 
-  isConsolidatedView, 
-  onAddTask, 
+export default function TableHeaderActions({
+  isManager,
+  isConsolidatedView,
+  onAddTask,
   onPrint,
-  onOpenManager, 
-  isLoading // Recebendo a prop isLoading
+  onOpenManager,
+  isLoading,
+  // Filtros
+  statuses,
+  users,
+  statusFilter,
+  onStatusChange,
+  userFilter,
+  onUserChange,
 }: TableHeaderActionsProps) {
   return (
     <div className="flex justify-between items-center mb-4">
       <div className="flex items-center gap-2">
-        {/* Futuro espaço para filtros */}
+        {/* Filtros da Tabela */}
+        <Select value={statusFilter} onValueChange={onStatusChange}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filtrar por status..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os Status</SelectItem>
+            {statuses.map(status => (
+              <SelectItem key={status.id} value={status.id}>{status.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={userFilter} onValueChange={onUserChange}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filtrar por responsável..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os Responsáveis</SelectItem>
+            {users.map(user => (
+              <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex gap-2">
         {!isConsolidatedView && isManager && (
@@ -31,7 +70,7 @@ export default function TableHeaderActions({
             Adicionar Tarefa
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onPrint} disabled={isLoading}> {/* Desabilitando o botão se estiver carregando */}
+        <Button variant="outline" size="sm" onClick={onPrint} disabled={isLoading}>
           <Printer className="h-4 w-4 mr-2" />
           Imprimir
         </Button>

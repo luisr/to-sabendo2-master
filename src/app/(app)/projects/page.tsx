@@ -23,31 +23,46 @@ import TableManagerModal from "@/components/projects/table-manager-modal";
 const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false });
 const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false });
 
+// Função de filtro recursivo
+const filterTasks = (tasks: Task[], statusFilter: string, userFilter: string): Task[] => {
+    if (statusFilter === 'all' && userFilter === 'all') {
+        return tasks;
+    }
+
+    return tasks.reduce((acc: Task[], task) => {
+        const statusMatch = statusFilter === 'all' || task.status_id === statusFilter;
+        const userMatch = userFilter === 'all' || task.assignee_id === userFilter;
+        const selfMatch = statusMatch && userMatch;
+
+        const filteredSubtasks = task.subtasks ? filterTasks(task.subtasks, statusFilter, userFilter) : [];
+
+        if (selfMatch || filteredSubtasks.length > 0) {
+            acc.push({ ...task, subtasks: filteredSubtasks });
+        }
+        
+        return acc;
+    }, []);
+};
+
+
 const ProjectsPageContent = () => {
     const { projects } = useProjects();
     const { user, users } = useUsers();
     const { statuses } = useTableSettings();
-    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, addTask, updateTask, deleteTask } = useTasks();
+    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask } = useTasks();
     
+    // Estados para os modais
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
     const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
     const [taskToView, setTaskToView] = useState<Task | null>(null);
     const [taskForObservations, setTaskForObservations] = useState<Task | null>(null);
     const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
+
+    // Estados para os filtros
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [userFilter, setUserFilter] = useState('all');
     
     const printRef = useRef<HTMLDivElement>(null);
-    const [isRefReady, setRefReady] = useState(false);
-
-    const callbackRef = (node: HTMLDivElement | null) => {
-        if (node) {
-            (printRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-            setRefReady(true);
-        } else {
-            (printRef as React.MutableRefObject<HTMLDivElement | null>).current = null;
-            setRefReady(false);
-        }
-    };
-    
     const handlePrint = useReactToPrint({ content: () => printRef.current });
 
     const isManager = useMemo(() => user?.role === 'Admin' || user?.role === 'Gerente', [user]);
@@ -57,14 +72,12 @@ const ProjectsPageContent = () => {
             setSelectedProjectId('consolidated');
         }
     }, [projects, selectedProjectId, setSelectedProjectId]);
-    
-    const handleUpdateTask = (taskData: Partial<Task> & { id: string }) => {
-        updateTask(taskData.id, taskData);
-        setTaskToEdit(null);
-    };
 
     const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [selectedProjectId, projects]);
-    const isConsolidatedView = selectedProjectId === 'consolidated';
+    const isConsolidatedView = selectedProjectId === 'consolidated' || selectedProjectId === null;
+    
+    // Aplicar os filtros às tarefas
+    const filteredTasks = useMemo(() => filterTasks(tasks, statusFilter, userFilter), [tasks, statusFilter, userFilter]);
 
     return (
         <div className="flex flex-col gap-4 h-full">
@@ -90,26 +103,36 @@ const ProjectsPageContent = () => {
                            onAddTask={() => setIsAddTaskModalOpen(true)}
                            onPrint={handlePrint}
                            onOpenManager={() => setIsManagerModalOpen(true)}
-                           isLoading={!isRefReady}
+                           isLoading={!printRef.current}
+                           // Passar props dos filtros
+                           statuses={statuses}
+                           users={users}
+                           statusFilter={statusFilter}
+                           onStatusChange={setStatusFilter}
+                           userFilter={userFilter}
+                           onUserChange={setUserFilter}
                        />
                        <TableView 
-                           printSectionRef={callbackRef}
-                           tasks={tasks} users={users}
+                           printSectionRef={printRef}
+                           tasks={filteredTasks} // Usar as tarefas filtradas
+                           users={users}
                            onEditTask={setTaskToEdit}
                            onViewTask={setTaskToView}
                            onOpenObservations={setTaskForObservations}
                            deleteTask={deleteTask}
-                           loading={loadingTasks} isManager={isManager}
+                           loading={loadingTasks} 
+                           isManager={isManager}
+                           currentUserId={user?.id}
                        />
                     </TabsContent>
-                    <TabsContent value="board" className="flex-1 overflow-y-auto"><KanbanBoard tasks={tasks} statuses={statuses} onDragEnd={() => {}} loading={loadingTasks} /></TabsContent>
+                    <TabsContent value="board" className="flex-1 overflow-y-auto"><KanbanBoard tasks={filteredTasks} statuses={statuses} onDragEnd={() => {}} loading={loadingTasks} /></TabsContent>
                    <TabsContent value="gantt" className="flex-1 overflow-y-auto">{!isConsolidatedView && selectedProjectId && <GanttChartWrapper selectedProject={selectedProjectId} />}</TabsContent>
                     <TabsContent value="wbs" className="flex-1 overflow-y-auto">{!isConsolidatedView && <WbsView tasks={tasks} />}</TabsContent>
                 </Tabs>
             )}
 
             <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={tasks} />
-            {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onSave={handleUpdateTask} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} /> )}
+            {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onTaskUpdate={refetchTasks} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} /> )}
             {taskToView && ( <ViewTaskModal key={`view-${taskToView.id}`} isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} /> )}
             {taskForObservations && ( <TaskObservationsModal key={`obs-${taskForObservations.id}`} isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} /> )}
             <TableManagerModal isOpen={isManagerModalOpen} onOpenChange={setIsManagerModalOpen} />
