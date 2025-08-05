@@ -21,7 +21,7 @@ import { MultiSelect } from "../shared/multi-select";
 interface EditTaskModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onTaskUpdate: () => void;
+  onTaskUpdate: (updatedData: Partial<Task>) => void; // Passa os dados atualizados
   task: Task;
   statuses: TaskStatus[];
   users: User[];
@@ -89,33 +89,35 @@ export default function EditTaskModal({
     const handleSaveWithReason = async (reason: string = "") => {
         if (!taskData?.id) return;
         
-        const rpcToCall = reason ? 'update_task_with_history' : 'update_task_with_tags';
-        const params = {
-            p_task_id: taskData.id,
-            p_name: taskData.name,
-            p_description: taskData.description,
-            p_assignee_id: taskData.assignee_id,
-            p_status_id: taskData.status_id,
-            p_priority: taskData.priority,
-            p_progress: taskData.progress,
-            p_start_date: taskData.start_date,
-            p_end_date: taskData.end_date,
-            p_parent_id: taskData.parent_id,
-            p_dependencies: (taskData.dependencies || []).map(d => typeof d === 'object' ? d.id : d),
-            p_tag_ids: selectedTagIds,
-            p_custom_fields: taskData.custom_fields,
-            ...(reason && { p_reason: reason })
+        const dataForUpdate: Partial<Task> & { tag_ids?: string[] } = {
+            name: taskData.name,
+            description: taskData.description,
+            assignee_id: taskData.assignee_id,
+            status_id: taskData.status_id,
+            priority: taskData.priority,
+            progress: taskData.progress,
+            start_date: taskData.start_date,
+            end_date: taskData.end_date,
+            parent_id: taskData.parent_id,
+            dependencies: (taskData.dependencies || []).map(d => typeof d === 'object' ? d.id : d),
+            custom_fields: taskData.custom_fields,
+            tag_ids: selectedTagIds,
         };
-
-        const { error } = await supabase.rpc(rpcToCall, params);
-
-        if (error) {
-            toast({ title: "Erro ao atualizar tarefa", description: error.message, variant: "destructive" });
-        } else {
-            toast({ title: "Tarefa atualizada com sucesso!" });
-            onTaskUpdate();
+        
+        onTaskUpdate(dataForUpdate); // Chama a função de atualização com os dados
+        
+        // Se houver motivo, salva no histórico (opcional, dependendo da sua lógica de RPC)
+        if (reason) {
+           const { error } = await supabase.rpc('update_task_with_history', {
+                p_task_id: taskData.id,
+                p_reason: reason,
+                ...dataForUpdate 
+            });
+            if (error) {
+                toast({ title: "Erro ao salvar histórico", description: error.message, variant: "destructive" });
+            }
         }
-
+        
         setIsHistoryModalOpen(false);
         onOpenChange(false);
     };

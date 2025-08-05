@@ -29,18 +29,36 @@ import { AlertModal } from "@/components/shared/alert-modal";
 import { DropResult } from "react-beautiful-dnd";
 import { useToast } from "@/hooks/use-toast";
 
-const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false });
-const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false });
+const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin" /> });
+const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin" /> });
+
+// Tipos
+type TaskWithSubtasks = Task & { subtasks?: TaskWithSubtasks[] };
+
+// Função de filtro hierárquico
+const filterHierarchicalTasks = (tasks: TaskWithSubtasks[], statusFilter: string, userFilter: string): TaskWithSubtasks[] => {
+    return tasks.map(task => {
+        const subtasks = task.subtasks ? filterHierarchicalTasks(task.subtasks, statusFilter, userFilter) : [];
+        const statusMatch = statusFilter === 'all' || task.status_id === statusFilter;
+        const userMatch = userFilter === 'all' || task.assignee_id === userFilter;
+
+        if ((statusMatch && userMatch) || subtasks.length > 0) {
+            return { ...task, subtasks };
+        }
+        return null;
+    }).filter((task): task is TaskWithSubtasks => task !== null);
+};
+
 
 const ProjectsPageContent = () => {
     const { projects, addProject, updateProject, deleteProject } = useProjects();
     const { user, users } = useUsers();
     const { tags } = useTags();
     const { statuses, loading: loadingSettings } = useTableSettings();
-    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask, setParentTask, updateTaskStatus } = useTasks();
+    const { tasks, rawTasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask, setParentTask, updateTaskStatus, updateTask } = useTasks();
     const { toast } = useToast();
 
-    // Estados dos modais
+    // Modais
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
     const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
     const [taskToView, setTaskToView] = useState<Task | null>(null);
@@ -51,6 +69,7 @@ const ProjectsPageContent = () => {
     const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
     const [isDeleteProjectModalOpen, setIsDeleteProjectModalOpen] = useState(false);
     
+    // Filtros
     const [statusFilter, setStatusFilter] = useState('all');
     const [userFilter, setUserFilter] = useState('all');
     const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -61,29 +80,31 @@ const ProjectsPageContent = () => {
     const isManager = useMemo(() => user?.role === 'Admin' || user?.role === 'Gerente', [user]);
 
     useEffect(() => {
-        if (projects.length > 0 && !selectedProjectId) {
-            setSelectedProjectId('consolidated');
-        }
+        if (projects.length > 0 && !selectedProjectId) setSelectedProjectId('consolidated');
     }, [projects, selectedProjectId, setSelectedProjectId]);
 
     const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [selectedProjectId, projects]);
     const isConsolidatedView = selectedProjectId === 'consolidated' || selectedProjectId === null;
     
-    const filteredTasks = useMemo(() => tasks.filter(task => {
-        const statusMatch = statusFilter === 'all' || task.status_id === statusFilter;
-        const userMatch = userFilter === 'all' || task.assignee_id === userFilter;
-        return statusMatch && userMatch;
-    }), [tasks, statusFilter, userFilter]);
+    // Lógica de filtro unificada
+    const filteredKanbanTasks = useMemo(() => rawTasks.filter(task => (statusFilter === 'all' || task.status_id === statusFilter) && (userFilter === 'all' || task.assignee_id === userFilter)), [rawTasks, statusFilter, userFilter]);
+    const filteredHierarchicalTasks = useMemo(() => filterHierarchicalTasks(tasks, statusFilter, userFilter), [tasks, statusFilter, userFilter]);
 
+    // Handlers
     const handleDragEnd = async (result: DropResult) => {
         const { destination, source, draggableId } = result;
         if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) return;
-        
         await updateTaskStatus(draggableId, destination.droppableId);
-        toast({ title: "Tarefa atualizada!", description: "O status da tarefa foi modificado." });
+        toast({ title: "Status da tarefa atualizado!" });
     };
 
-    const handleSetSubtask = async (parentId: string) => { /* ... */ };
+    const handleSetSubtask = async (parentId: string) => {
+        await setParentTask(Array.from(selectedTasks), parentId);
+        toast({ title: "Subtarefas definidas!", description: `${selectedTasks.size} tarefas foram re-organizadas.` });
+        setSelectedTasks(new Set());
+        setIsSetSubtaskModalOpen(false);
+    };
+
     const handleDeleteProject = async () => { /* ... */ };
 
     const projectActions = ( <div className="flex items-center gap-2"> <ProjectSelector projects={projects} value={selectedProjectId || ''} onValueChange={setSelectedProjectId} showConsolidatedView={true} /> {isManager && ( <> <Button onClick={() => setIsAddProjectModalOpen(true)}> <PlusCircle className="h-4 w-4 mr-2" /> Novo Projeto </Button> {!isConsolidatedView && currentProject && ( <DropdownMenu> <DropdownMenuTrigger asChild><Button variant="outline" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger> <DropdownMenuContent> <DropdownMenuItem onClick={() => setProjectToEdit(currentProject)}>Editar</DropdownMenuItem> <DropdownMenuItem onClick={() => setIsDeleteProjectModalOpen(true)} className="text-red-500">Excluir</DropdownMenuItem> </DropdownMenuContent> </DropdownMenu> )} </> )} </div> );
@@ -95,10 +116,7 @@ const ProjectsPageContent = () => {
     return (
         <div className="flex flex-col h-full">
             <div className="p-4 pb-0">
-                <PageHeader
-                    title={isConsolidatedView ? "Visão Consolidada" : (currentProject?.name || "Projetos")}
-                    actions={projectActions}
-                />
+                <PageHeader title={isConsolidatedView ? "Visão Consolidada" : (currentProject?.name || "Projetos")} actions={projectActions} />
             </div>
             <Tabs defaultValue="kanban" className="flex flex-col flex-1 min-h-0 p-4 pt-2">
                 <TabsList className="flex-shrink-0">
@@ -107,30 +125,36 @@ const ProjectsPageContent = () => {
                     <TabsTrigger value="gantt" disabled={isConsolidatedView}>Gantt</TabsTrigger>
                     <TabsTrigger value="wbs" disabled={isConsolidatedView}>EAP</TabsTrigger>
                 </TabsList>
+
+                {/* Tabela */}
                 <TabsContent value="table" className="flex-1 flex flex-col min-h-0 mt-2">
                    <TableHeaderActions {...{isManager, isConsolidatedView, statuses, users, statusFilter, userFilter, selectedTasks}} onAddTask={() => setIsAddTaskModalOpen(true)} onPrint={handlePrint} onOpenManager={() => setIsManagerModalOpen(true)} onSetSubtask={() => setIsSetSubtaskModalOpen(true)} isLoading={!printRef.current} onStatusChange={setStatusFilter} onUserChange={setUserFilter} />
-                   <div className="flex-1 overflow-y-auto">
-                        <TableView {...{tasks: filteredTasks, users, deleteTask, isManager, selectedTasks, setSelectedTasks}} ref={printRef} onEditTask={setTaskToEdit} onViewTask={setTaskToView} onOpenObservations={setTaskForObservations} loading={loadingTasks} currentUserId={user?.id} />
-                   </div>
+                    <TableView ref={printRef} {...{tasks: filteredHierarchicalTasks, users, deleteTask, isManager, selectedTasks, setSelectedTasks}} onEditTask={setTaskToEdit} onViewTask={setTaskToView} onOpenObservations={setTaskForObservations} loading={loadingTasks} currentUserId={user?.id} />
                 </TabsContent>
+
+                {/* Kanban */}
                 <TabsContent value="kanban" className="flex-1 min-h-0 mt-2">
-                    <KanbanBoard tasks={filteredTasks} statuses={statuses} onDragEnd={handleDragEnd} loading={loadingTasks || loadingSettings} onEditTask={setTaskToEdit} />
+                    <KanbanBoard tasks={filteredKanbanTasks} statuses={statuses} onDragEnd={handleDragEnd} loading={loadingTasks || loadingSettings} onEditTask={setTaskToEdit} />
                 </TabsContent>
+
+                {/* Gantt */}
                 <TabsContent value="gantt" className="flex-1 overflow-y-auto mt-2">
-                   {!isConsolidatedView && selectedProjectId && <GanttChartWrapper selectedProject={selectedProjectId} />}
+                   {!isConsolidatedView && <GanttChartWrapper tasks={filteredHierarchicalTasks} />}
                 </TabsContent>
+
+                {/* EAP */}
                 <TabsContent value="wbs" className="flex-1 overflow-y-auto mt-2">
-                    {!isConsolidatedView && <WbsView />}
+                    {!isConsolidatedView && <WbsView tasks={filteredHierarchicalTasks} />}
                 </TabsContent>
             </Tabs>
             
             {/* Modais */}
-            <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={tasks} tags={tags} />
-            {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onTaskUpdate={refetchTasks} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} tags={tags} /> )}
+            <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={rawTasks} tags={tags} />
+            {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onTaskUpdate={(updatedTask) => updateTask(taskToEdit.id, updatedTask)} task={taskToEdit} statuses={statuses} users={users} tasks={rawTasks} tags={tags} /> )}
             {taskToView && ( <ViewTaskModal key={`view-${taskToView.id}`} isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} /> )}
             {taskForObservations && ( <TaskObservationsModal key={`obs-${taskForObservations.id}`} isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} /> )}
             <TableManagerModal isOpen={isManagerModalOpen} onOpenChange={setIsManagerModalOpen} />
-            <SetSubtaskModal isOpen={isSetSubtaskModalOpen} onOpenChange={() => setIsSetSubtaskModalOpen(false)} tasks={tasks.filter(t => !selectedTasks.has(t.id))} onSetParent={handleSetSubtask} />
+            <SetSubtaskModal isOpen={isSetSubtaskModalOpen} onOpenChange={() => setIsSetSubtaskModalOpen(false)} tasks={rawTasks.filter(t => !selectedTasks.has(t.id))} onSetParent={handleSetSubtask} />
             <AddProjectModal isOpen={isAddProjectModalOpen} onOpenChange={setIsAddProjectModalOpen} onSave={addProject} />
             {projectToEdit && <EditProjectModal isOpen={!!projectToEdit} onOpenChange={() => setProjectToEdit(null)} onSave={updateProject} project={projectToEdit} />}
             <AlertModal isOpen={isDeleteProjectModalOpen} onClose={() => setIsDeleteProjectModalOpen(false)} onConfirm={handleDeleteProject} title="Excluir Projeto" description={`Tem certeza que deseja excluir o projeto "${currentProject?.name}"? Todas as tarefas associadas serão perdidas.`} />

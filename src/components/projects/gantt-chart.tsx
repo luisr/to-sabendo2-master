@@ -4,11 +4,10 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { FrappeGantt } from 'frappe-gantt-react';
 import { useTasks } from '@/hooks/use-tasks';
 import { Loader2, GitBranch, ChevronsUpDown } from 'lucide-react';
-import type { Task as AppTask, Baseline, BaselineTask } from '@/lib/types';
+import type { Task as AppTask, Baseline } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { startOfToday, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, isWithinInterval, parseISO } from 'date-fns';
 import SetBaselineModal from './set-baseline-modal';
 import { supabase } from '@/lib/supabase';
 import './gantt-chart.css'; 
@@ -24,28 +23,6 @@ interface FrappeTask {
     custom_class?: string;
 }
 type TaskNode = AppTask & { children: TaskNode[] };
-type TimeFilterOption = 'all' | 'month' | 'quarter' | 'year';
-
-
-// Função para construir a árvore de tarefas
-const buildTaskTree = (tasks: AppTask[]): TaskNode[] => {
-    if (!tasks || tasks.length === 0) return [];
-
-    const tasksWithChildren: TaskNode[] = JSON.parse(JSON.stringify(tasks)).map((t: AppTask) => ({ ...t, children: [] }));
-    const taskMap = new Map(tasksWithChildren.map(t => [t.id, t]));
-    const rootTasks: TaskNode[] = [];
-
-    tasksWithChildren.forEach(task => {
-        if (task.parent_id && taskMap.has(task.parent_id)) {
-            const parent = taskMap.get(task.parent_id)!;
-            if (!parent.children) parent.children = [];
-            parent.children.push(task);
-        } else {
-            rootTasks.push(task);
-        }
-    });
-    return rootTasks;
-};
 
 // Função para achatar a árvore de tarefas para o formato Frappe
 const flattenTaskTree = (taskTree: TaskNode[]): FrappeTask[] => {
@@ -55,12 +32,11 @@ const flattenTaskTree = (taskTree: TaskNode[]): FrappeTask[] => {
             if (task.start_date && task.end_date) {
                 flattened.push({
                     id: task.id,
-                    name: task.name,
+                    name: `${task.wbs_code} ${task.name}`,
                     start: task.start_date,
                     end: task.end_date,
                     progress: task.progress || 0,
                     dependencies: task.dependencies?.join(',') || '',
-                    custom_class: `gantt-level-${level}` // Classe para estilização hierárquica
                 });
                 if (task.children && task.children.length > 0) {
                     traverse(task.children, level + 1);
@@ -72,11 +48,10 @@ const flattenTaskTree = (taskTree: TaskNode[]): FrappeTask[] => {
     return flattened;
 };
 
-export default function GanttChart({ selectedProject }: { selectedProject: string | undefined }) {
-    const { tasks, loading: tasksLoading } = useTasks();
+export default function GanttChart({ tasks }: { tasks: TaskNode[] }) {
+    const { loading: tasksLoading } = useTasks();
     const [ganttTasks, setGanttTasks] = useState<FrappeTask[]>([]);
     const [viewMode, setViewMode] = useState('Week');
-    const [timeFilter, setTimeFilter] = useState<TimeFilterOption>('all');
     const [isBaselineModalOpen, setIsBaselineModalOpen] = useState(false);
     
     // Estados para Linha de Base
@@ -85,6 +60,7 @@ export default function GanttChart({ selectedProject }: { selectedProject: strin
     const [popoverOpen, setPopoverOpen] = useState(false);
 
     const ganttRef = useRef<any>(null);
+    const selectedProject = tasks[0]?.project_id; // Pega o ID do projeto da primeira tarefa
 
     // Carregar linhas de base
     useEffect(() => {
@@ -97,29 +73,13 @@ export default function GanttChart({ selectedProject }: { selectedProject: strin
         fetchBaselines();
     }, [selectedProject]);
 
-    // Filtrar tarefas por tempo
-    const filteredTasks = useMemo(() => {
-        if (!tasks) return [];
-        if (timeFilter === 'all') return tasks;
-        const today = startOfToday();
-        let interval: Interval;
-        switch (timeFilter) {
-            case 'month': interval = { start: startOfMonth(today), end: endOfMonth(today) }; break;
-            case 'quarter': interval = { start: startOfQuarter(today), end: endOfQuarter(today) }; break;
-            case 'year': interval = { start: startOfYear(today), end: endOfYear(today) }; break;
-            default: return tasks;
-        }
-        return tasks.filter(task => task.start_date && isWithinInterval(new Date(task.start_date), interval));
-    }, [tasks, timeFilter]);
-
     // Formatar tarefas para o Gantt
     useEffect(() => {
-        if (!tasksLoading && Array.isArray(filteredTasks)) {
-            const taskTree = buildTaskTree(filteredTasks);
-            const formattedTasks = flattenTaskTree(taskTree);
+        if (!tasksLoading && Array.isArray(tasks)) {
+            const formattedTasks = flattenTaskTree(tasks);
             setGanttTasks(formattedTasks);
         }
-    }, [filteredTasks, tasksLoading]);
+    }, [tasks, tasksLoading]);
     
     if (tasksLoading) {
         return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
