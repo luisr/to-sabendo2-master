@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
-import { useTasks } from '@/hooks/use-tasks';
+import type { Task, ProjectBaseline } from '@/lib/types';
 
 const baselineFormSchema = z.object({
   name: z.string().min(3, 'O nome da linha de base deve ter pelo menos 3 caracteres.'),
@@ -35,23 +35,41 @@ const baselineFormSchema = z.object({
 interface SetBaselineModalProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedProject: string | undefined;
+  project: { id: string } | null;
+  tasks: Task[];
+  onSuccess: (newBaseline: ProjectBaseline) => void;
 }
 
-export default function SetBaselineModal({ isOpen, onClose, selectedProject }: SetBaselineModalProps) {
+const formatDateToISO = (dateInput: string | Date | null): string | null => {
+  if (!dateInput) return null;
+  try {
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) {
+      throw new Error(`Data inválida recebida: ${dateInput}`);
+    }
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    console.error("Erro ao formatar data:", error);
+    return null;
+  }
+};
+
+export default function SetBaselineModal({ isOpen, onClose, project, tasks, onSuccess }: SetBaselineModalProps) {
   const { toast } = useToast();
-  const { tasks } = useTasks(); // Usamos o hook para ter acesso às tarefas atuais
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof baselineFormSchema>>({
     resolver: zodResolver(baselineFormSchema),
     defaultValues: {
-      name: '',
+      name: `Linha de Base - ${new Date().toLocaleDateString('pt-BR')}`,
     },
   });
 
   async function onSubmit(values: z.infer<typeof baselineFormSchema>) {
-    if (!selectedProject || !tasks || tasks.length === 0) {
+    if (!project || !tasks || tasks.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -63,58 +81,67 @@ export default function SetBaselineModal({ isOpen, onClose, selectedProject }: S
     setIsSubmitting(true);
 
     try {
-        // Obter o ID do usuário atual
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Usuário não autenticado.');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado.');
 
-        // 1. Inserir a linha de base principal
-        const { data: baselineData, error: baselineError } = await supabase
-            .from('project_baselines')
-            .insert({
-                project_id: selectedProject,
-                name: values.name,
-                created_by: user.id,
-            })
-            .select()
-            .single();
+      const { data: baselineData, error: baselineError } = await supabase
+        .from('project_baselines')
+        .insert({
+          project_id: project.id,
+          name: values.name,
+          created_by: user.id,
+        })
+        .select()
+        .single();
 
-        if (baselineError) throw baselineError;
+      if (baselineError) throw new Error(baselineError.message);
+      if (!baselineData) throw new Error('Falha ao obter dados da linha de base após a criação.');
 
-        // 2. Preparar as tarefas da linha de base
-        const baselineTasks = tasks
-            .filter(task => task.start_date && task.end_date) // Apenas tarefas com datas
-            .map(task => ({
-                baseline_id: baselineData.id,
-                original_task_id: task.id,
-                start_date: task.start_date,
-                end_date: task.end_date,
-            }));
+      const baselineTasks = tasks
+        .map(task => {
+          const formattedStartDate = formatDateToISO(task.start_date);
+          const formattedEndDate = formatDateToISO(task.end_date);
 
-        // 3. Inserir as tarefas da linha de base em lote
-        if (baselineTasks.length > 0) {
-            const { error: tasksError } = await supabase
-                .from('baseline_tasks')
-                .insert(baselineTasks);
+          if (!formattedStartDate || !formattedEndDate) {
+            console.warn(`Tarefa "${task.name}" (ID: ${task.id}) ignorada por ter datas inválidas.`);
+            return null;
+          }
+          
+          return {
+            baseline_id: baselineData.id,
+            original_task_id: task.id,
+            name: task.name,
+            start_date: formattedStartDate,
+            end_date: formattedEndDate,
+          };
+        })
+        .filter(Boolean);
 
-            if (tasksError) throw tasksError;
-        }
+      if (baselineTasks.length > 0) {
+        const { error: tasksError } = await supabase
+          .from('baseline_tasks')
+          .insert(baselineTasks as any);
 
-        toast({
-            title: 'Sucesso!',
-            description: `Linha de base "${values.name}" criada com ${baselineTasks.length} tarefas.`,
-        });
-        form.reset();
-        onClose();
+        if (tasksError) throw new Error(tasksError.message);
+      }
+
+      toast({
+        title: 'Sucesso!',
+        description: `Linha de base "${values.name}" criada com ${baselineTasks.length} tarefas.`,
+      });
+      onSuccess(baselineData);
+      form.reset();
+      onClose();
 
     } catch (error: any) {
-        console.error('Erro ao criar linha de base:', error);
-        toast({
-            variant: 'destructive',
-            title: 'Erro ao criar linha de base',
-            description: error.message || 'Ocorreu um erro desconhecido. Tente novamente.',
-        });
+      console.error('Erro detalhado ao criar linha de base:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao criar linha de base',
+        description: error.message || 'Ocorreu um erro desconhecido. Verifique o console para detalhes.',
+      });
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   }
 

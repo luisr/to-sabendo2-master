@@ -1,10 +1,28 @@
 .gantt-container {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .gantt-chart-area {
     position: relative;
+    flex-grow: 1;
 }
+
+/* Linha vertical para o dia de hoje */
+.gantt-today-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: rgba(239, 68, 68, 0.8); /* Cor vermelha semi-transparente */
+    border-left: 1px dashed #fff;
+    border-right: 1px dashed #fff;
+    z-index: 10; /* Garante que fique acima das barras */
+    pointer-events: none; /* Não interfere com cliques */
+}
+
 
 .baseline-layer {
     position: absolute;
@@ -12,33 +30,64 @@
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* A camada não deve interferir com os cliques no gráfico */
+    pointer-events: none; 
     overflow: hidden;
 }
 
 .baseline-bar {
     position: absolute;
-    height: 8px; /* Mais fina que a barra principal */
-    background-color: #a0a0a0; /* Cor cinza para a linha de base */
+    height: 10px; 
+    background-color: #6b7280; /* Cinza mais escuro para melhor contraste */
     border-radius: 4px;
-    opacity: 0.8;
-    z-index: 1; /* Fica abaixo da barra principal mas acima da grid */
+    opacity: 0.9;
+    z-index: 1; 
     transition: all 0.2s ease-out;
 }
 
 .baseline-bar:hover {
     opacity: 1;
-    height: 10px;
+    transform: scaleY(1.1);
 }
 
-/* Ajuste para garantir que a grid do gantt não sobreponha a UI */
-.gantt .grid {
-    z-index: 0;
+/* Estilização para o nome da tarefa (incluindo ícone de expandir/recolher) */
+.gantt-task-name {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Ajuste para a barra de tarefa principal ficar visível acima da linha de base */
-.gantt-bar-wrapper {
-    z-index: 2;
-    position: relative;
+.gantt-expander {
+    margin-right: 6px;
+    font-family: monospace;
+    font-size: 1.2em;
+    width: 15px; /* Largura fixa para alinhamento */
+    display: inline-block;
+    text-align: center;
 }
 
+/* Níveis de indentação para subtarefas */
+.gantt-level-1 { --bar-bg: #a3a3a3; }
+.gantt-level-2 { --bar-bg: #b3b3b3; }
+.gantt-level-3 { --bar-bg: #c3c3c3; }
+.gantt .bar-wrapper.gantt-level-1 .bar { background-color: var(--bar-bg); }
+.gantt .bar-wrapper.gantt-level-2 .bar { background-color: var(--bar-bg); }
+.gantt .bar-wrapper.gantt-level-3 .bar { background-color: var(--bar-bg); }
+
+
+/* Cabeçalho de projeto na visão consolidada */
+.gantt-project-header .bar-wrapper {
+    display: none; /* Esconde a "barra" do projeto */
+}
+.gantt-project-header .bar-label {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #111827; /* Cor escura para o texto do projeto */
+}
+
+/* Garante que o SVG não seja cortado */
+.gantt-container svg {
+  display: block;
+}

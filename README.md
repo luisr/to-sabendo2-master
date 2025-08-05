@@ -1,86 +1,82 @@
-# To Sabendo - Gerenciador de Projetos com IA
+# Sabendo - Gerenciador de Projetos Inteligente
 
-Bem-vindo ao **To Sabendo**, um gerenciador de projetos de código aberto construído com Next.js, Supabase e Tailwind CSS, projetado para ser uma plataforma robusta e extensível para gestão de projetos, tarefas e equipes.
+Sabendo é uma plataforma de gerenciamento de projetos moderna, construída com Next.js, Supabase e Genkit AI. A ferramenta oferece uma experiência fluida para planejar, executar e monitorar projetos, com um foco especial em colaboração e automação inteligente.
 
 ## Visão Geral
 
-Este projeto fornece uma base sólida para a construção de um sistema de gerenciamento de projetos completo, com funcionalidades que incluem:
+A plataforma foi projetada para resolver desafios comuns no gerenciamento de projetos, como falta de visibilidade, dificuldade na colaboração e processos manuais demorados. Com uma interface intuitiva e recursos avançados, o Sabendo ajuda equipes a manterem o foco, cumprirem prazos e alcançarem seus objetivos.
 
-- **Gestão de Projetos e Tarefas:** Crie e gerencie projetos, tarefas e subtarefas de forma hierárquica.
-- **Colaboração em Equipe:** Adicione colaboradores aos projetos com diferentes níveis de permissão.
-- **Segurança Robusta:** Utiliza o sistema de Row Level Security (RLS) do Supabase para garantir que os usuários acessem apenas os dados que lhes são permitidos.
-- **Autenticação Integrada:** Gerenciamento de usuários e perfis integrado com o Supabase Auth.
-- **Armazenamento Seguro:** Upload e download de anexos em tarefas, com políticas de segurança granulares no Supabase Storage.
+## Funcionalidades Principais
 
-## Setup e Instalação
+- **Visualizações Múltiplas:** Acompanhe o progresso do projeto com diferentes visões:
+  - **Tabela:** Uma visão detalhada e personalizável de todas as tarefas.
+  - **Kanban:** Um quadro visual para gerenciar o fluxo de trabalho.
+  - **Gráfico de Gantt:** Um cronograma interativo para planejar e visualizar dependências.
+  - **EAP (WBS):** Uma estrutura analítica para decompor o projeto em entregas menores.
+- **Hierarquia de Tarefas:** Crie subtarefas para organizar o trabalho de forma granular.
+- **Visão Consolidada:** Gerencie múltiplos projetos em um único lugar, com visões consolidadas de Gantt e EAP.
+- **Colaboração:** Convide membros para projetos, atribua tarefas e acompanhe o trabalho da equipe.
+- **Recursos Inteligentes (IA):** Ferramentas baseadas em IA para auxiliar no planejamento, previsão de riscos e geração de relatórios (via Genkit AI).
 
-Para configurar o ambiente de desenvolvimento e executar o projeto, siga os passos abaixo. O processo foi consolidado para ser o mais simples possível.
+## Tecnologias Utilizadas
 
-### Pré-requisitos
+- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
+- **Backend e Banco de Dados:** Supabase (PostgreSQL, Auth, Realtime)
+- **IA e Automação:** Google Genkit AI
+- **Componentes:** shadcn/ui
+- **Drag & Drop:** react-beautiful-dnd
 
-- Conta no [Supabase](https://supabase.com)
-- [Node.js](https://nodejs.org/) (versão 18 ou superior)
-- [npm](https://www.npmjs.com/) (geralmente instalado com o Node.js)
+## Configuração do Ambiente
 
-### Passo 1: Configurar o Projeto Supabase
+Siga os passos abaixo para configurar e rodar o projeto localmente.
 
-1.  **Crie um Projeto:** Acesse seu [painel do Supabase](https://supabase.com/dashboard/projects) e crie um novo projeto.
-2.  **Obtenha as Credenciais:** No painel do seu projeto, vá para **Project Settings > API**. Você precisará da **Project URL** e da chave **`anon` public**.
-3.  **Crie um Bucket de Armazenamento:** Vá para a seção **Storage** e crie um novo bucket chamado `tosabendo2`. **Importante:** Mantenha este bucket como **privado**. As políticas de segurança que iremos aplicar garantirão o acesso seguro.
+### 1. Pré-requisitos
 
-### Passo 2: Configurar o Ambiente Local
+- Node.js (v18 ou superior)
+- npm ou yarn
+- Conta no [Supabase](https://supabase.com/)
+- Supabase CLI instalado: `npm install -g supabase`
 
-1.  **Clone o Repositório:**
+### 2. Configuração do Supabase
+
+1.  **Login no Supabase CLI:**
     ```bash
-    git clone https://github.com/seu-usuario/to-sabendo.git
-    cd to-sabendo
+    supabase login
     ```
-2.  **Instale as Dependências:**
+
+2.  **Vincule o Projeto:** Navegue até a pasta do projeto e vincule seu projeto Supabase (substitua `[project-ref]` pelo ID do seu projeto):
+    ```bash
+    supabase link --project-ref [project-ref]
+    ```
+
+3.  **Variáveis de Ambiente:**
+    - Renomeie o arquivo `.env.local.example` para `.env.local`.
+    - Abra o arquivo `.env.local` e preencha as variáveis `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` com as informações do seu projeto Supabase.
+
+### 3. Configuração do Banco de Dados
+
+1.  **Execute o Script de Setup:**
+    - No painel do seu projeto Supabase, vá para o **SQL Editor**.
+    - Copie o conteúdo do arquivo `supabase/setup_consolidado.sql` e execute-o. Isso criará todas as tabelas, funções e políticas de segurança (RLS).
+
+2.  **Execute o Script de Seed (Dados de Exemplo):**
+    - No **SQL Editor**, copie o conteúdo do arquivo `supabase/seed.sql` e execute-o.
+    - **Importante:** O script de seed usa UUIDs de exemplo. Você precisará substituí-los pelos IDs dos usuários que você criou no seu ambiente de autenticação do Supabase.
+
+### 4. Instalação e Execução do Projeto
+
+1.  **Instale as Dependências:**
     ```bash
     npm install
     ```
-3.  **Configure as Variáveis de Ambiente:**
-    - Crie um ficheiro `.env.local` na raiz do projeto.
-    - Adicione as credenciais do seu projeto Supabase a este ficheiro:
-      ```env
-      NEXT_PUBLIC_SUPABASE_URL=SUA_PROJECT_URL
-      NEXT_PUBLIC_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLIC
-      ```
 
-### Passo 3: Executar o Script de Setup do Banco de Dados
+2.  **Rode o Servidor de Desenvolvimento:**
+    ```bash
+    npm run dev
+    ```
 
-Toda a configuração do banco de dados (tabelas, funções, políticas de segurança e dados iniciais) foi consolidada em um único script.
+A aplicação estará disponível em `http://localhost:3000` (ou na porta que você configurar).
 
-1.  **Acesse o SQL Editor:** No painel do seu projeto Supabase, vá para a seção **SQL Editor**.
-2.  **Execute o Script:**
-    - Abra o ficheiro `supabase/setup_consolidado.sql` que se encontra neste repositório.
-    - Copie todo o conteúdo do ficheiro.
-    - Cole o conteúdo no SQL Editor e clique em **"Run"**.
+## Próximos Passos e Contribuição
 
-**Importante:** O script de seed (dados iniciais) está configurado com IDs de usuário de exemplo. Para que os dados de exemplo (projetos, tarefas) sejam associados corretamente, você precisará:
-1.  Criar os usuários no painel de **Authentication > Users** do Supabase.
-2.  Copiar os IDs desses usuários.
-3.  Colar os IDs nos locais indicados na **PART 6** do script `setup_consolidado.sql` antes de o executar.
-
-### Passo 4: Executar a Aplicação
-
-Com o backend configurado, você pode iniciar o servidor de desenvolvimento:
-
-```bash
-npm run dev
-```
-
-Abra [http://localhost:3000](http://localhost:3000) no seu navegador para ver a aplicação em funcionamento.
-
-## Arquitetura de Segurança
-
-A segurança é um pilar deste projeto, garantida por várias camadas:
-
-- **Row Level Security (RLS):** Todas as tabelas principais têm políticas de RLS ativas, garantindo que as consultas (mesmo as feitas diretamente do cliente) só retornem os dados permitidos.
-- **Funções `SECURITY DEFINER`:** Funções auxiliares críticas são executadas com os privilégios do criador da função, permitindo verificações de permissão seguras sem expor a lógica ao cliente.
-- **Políticas de Storage:** O acesso ao bucket de armazenamento é controlado por políticas que verificam se um usuário é membro de um projeto antes de permitir o upload ou download de ficheiros, prevenindo o acesso não autorizado a anexos.
-- **Tabela `profiles`:** Os dados públicos dos usuários são armazenados numa tabela `profiles`, separada da tabela `auth.users` do Supabase, seguindo as melhores práticas de segurança e evitando a exposição de dados sensíveis.
-
----
-
-Agradecemos o seu interesse no To Sabendo! Se encontrar algum problema ou tiver sugestões, por favor, abra uma issue.
+Este projeto está em constante evolução. Sinta-se à vontade para contribuir com novas funcionalidades, melhorias ou correções de bugs.

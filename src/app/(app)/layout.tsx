@@ -37,9 +37,9 @@ export default function AppLayout({
             <DashboardPreferencesProvider>
               <div className="flex min-h-screen w-full flex-col bg-muted/40">
                 <Sidebar />
-                <div className="flex flex-col sm:pl-14 flex-1">
+                <div className="flex flex-1 flex-col sm:pl-14">
                   <Header />
-                  <main className="flex flex-1 flex-col overflow-hidden">
+                  <main className="flex flex-1 flex-col overflow-hidden p-4 sm:px-6 sm:py-4 md:gap-8">
                     {children}
                   </main>
                 </div>

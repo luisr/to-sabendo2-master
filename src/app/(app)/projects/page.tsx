@@ -29,8 +29,9 @@ import { AlertModal } from "@/components/shared/alert-modal";
 import { DropResult } from "react-beautiful-dnd";
 import { useToast } from "@/hooks/use-toast";
 
+// Importa os componentes diretamente
 const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin" /> });
-const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin" /> });
+const GanttChart = dynamic(() => import('@/components/projects/gantt-chart'), { ssr: false, loading: () => <Loader2 className="h-8 w-8 animate-spin" /> });
 
 // Tipos
 type TaskWithSubtasks = Task & { subtasks?: TaskWithSubtasks[] };
@@ -138,9 +139,9 @@ const ProjectsPageContent = () => {
                     <KanbanBoard tasks={filteredKanbanTasks} statuses={statuses} onDragEnd={handleDragEnd} loading={loadingTasks || loadingSettings} onEditTask={setTaskToEdit} />
                 </TabsContent>
 
-                {/* Gantt e EAP com `key` para forçar a remontagem */}
+                {/* Gantt e EAP com `key` e chamada direta */}
                 <TabsContent value="gantt" className="flex-1 overflow-y-auto mt-2">
-                   <GanttChartWrapper key={selectedProjectId} tasks={filteredHierarchicalTasks} isConsolidated={isConsolidatedView} />
+                   <GanttChart key={selectedProjectId} tasks={filteredHierarchicalTasks} isConsolidated={isConsolidatedView} />
                 </TabsContent>
                 <TabsContent value="wbs" className="flex-1 overflow-y-auto mt-2">
                     <WbsView key={selectedProjectId} tasks={filteredHierarchicalTasks} isConsolidated={isConsolidatedView} />
