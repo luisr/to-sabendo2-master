@@ -44,7 +44,6 @@ export interface Tag {
     name: string;
 }
 
-// **NOVO TIPO ADICIONADO**
 export interface Observation {
     id: string;
     task_id: string;
@@ -52,8 +51,26 @@ export interface Observation {
     content?: string;
     file_url?: string;
     created_at: string;
-    users: { // Para o join com a tabela de usuários
+    users: { 
         name: string;
         avatar_url?: string;
     }
+}
+
+// Definições para Linha de Base
+export interface Baseline {
+  id: string;
+  project_id: string;
+  name: string;
+  created_at: string;
+  created_by: string;
+  baseline_tasks: BaselineTask[]; // Aninhando as tarefas da linha de base
+}
+
+export interface BaselineTask {
+  id: string;
+  baseline_id: string;
+  original_task_id: string;
+  start_date: string;
+  end_date: string;
 }

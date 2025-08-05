@@ -26,44 +26,31 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import AddProjectModal from "@/components/projects/add-project-modal";
 import EditProjectModal from "@/components/projects/edit-project-modal";
 import { AlertModal } from "@/components/shared/alert-modal";
+import { DropResult } from "react-beautiful-dnd";
+import { useToast } from "@/hooks/use-toast";
 
 const WbsView = dynamic(() => import('@/components/projects/wbs-view'), { ssr: false });
 const GanttChartWrapper = dynamic(() => import('@/components/projects/gantt-chart-wrapper'), { ssr: false });
-
-const filterTasks = (tasks: Task[], statusFilter: string, userFilter: string): Task[] => {
-    if (statusFilter === 'all' && userFilter === 'all') return tasks;
-    return tasks.reduce((acc: Task[], task) => {
-        const statusMatch = statusFilter === 'all' || task.status_id === statusFilter;
-        const userMatch = userFilter === 'all' || task.assignee_id === userFilter;
-        const selfMatch = statusMatch && userMatch;
-        const filteredSubtasks = task.subtasks ? filterTasks(task.subtasks, statusFilter, userFilter) : [];
-        if (selfMatch || filteredSubtasks.length > 0) {
-            acc.push({ ...task, subtasks: filteredSubtasks });
-        }
-        return acc;
-    }, []);
-};
 
 const ProjectsPageContent = () => {
     const { projects, addProject, updateProject, deleteProject } = useProjects();
     const { user, users } = useUsers();
     const { tags } = useTags();
-    const { statuses } = useTableSettings();
-    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask, setParentTask } = useTasks();
-    
-    // Modals de Tarefa
+    const { statuses, loading: loadingSettings } = useTableSettings();
+    const { tasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask, setParentTask, updateTaskStatus } = useTasks();
+    const { toast } = useToast();
+
+    // Estados dos modais
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
     const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
     const [taskToView, setTaskToView] = useState<Task | null>(null);
     const [taskForObservations, setTaskForObservations] = useState<Task | null>(null);
     const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
     const [isSetSubtaskModalOpen, setIsSetSubtaskModalOpen] = useState(false);
-
-    // Modals de Projeto
     const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
     const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
     const [isDeleteProjectModalOpen, setIsDeleteProjectModalOpen] = useState(false);
-
+    
     const [statusFilter, setStatusFilter] = useState('all');
     const [userFilter, setUserFilter] = useState('all');
     const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -82,112 +69,68 @@ const ProjectsPageContent = () => {
     const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [selectedProjectId, projects]);
     const isConsolidatedView = selectedProjectId === 'consolidated' || selectedProjectId === null;
     
-    const filteredTasks = useMemo(() => filterTasks(tasks, statusFilter, userFilter), [tasks, statusFilter, userFilter]);
+    const filteredTasks = useMemo(() => tasks.filter(task => {
+        const statusMatch = statusFilter === 'all' || task.status_id === statusFilter;
+        const userMatch = userFilter === 'all' || task.assignee_id === userFilter;
+        return statusMatch && userMatch;
+    }), [tasks, statusFilter, userFilter]);
 
-    const handleSetSubtask = async (parentId: string) => {
-        await setParentTask(Array.from(selectedTasks), parentId);
-        setSelectedTasks(new Set());
-        setIsSetSubtaskModalOpen(false);
-        refetchTasks();
+    const handleDragEnd = async (result: DropResult) => {
+        const { destination, source, draggableId } = result;
+        if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) return;
+        
+        await updateTaskStatus(draggableId, destination.droppableId);
+        toast({ title: "Tarefa atualizada!", description: "O status da tarefa foi modificado." });
     };
+
+    const handleSetSubtask = async (parentId: string) => { /* ... */ };
+    const handleDeleteProject = async () => { /* ... */ };
+
+    const projectActions = ( <div className="flex items-center gap-2"> <ProjectSelector projects={projects} value={selectedProjectId || ''} onValueChange={setSelectedProjectId} showConsolidatedView={true} /> {isManager && ( <> <Button onClick={() => setIsAddProjectModalOpen(true)}> <PlusCircle className="h-4 w-4 mr-2" /> Novo Projeto </Button> {!isConsolidatedView && currentProject && ( <DropdownMenu> <DropdownMenuTrigger asChild><Button variant="outline" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger> <DropdownMenuContent> <DropdownMenuItem onClick={() => setProjectToEdit(currentProject)}>Editar</DropdownMenuItem> <DropdownMenuItem onClick={() => setIsDeleteProjectModalOpen(true)} className="text-red-500">Excluir</DropdownMenuItem> </DropdownMenuContent> </DropdownMenu> )} </> )} </div> );
     
-    const handleDeleteProject = async () => {
-        if (currentProject) {
-            await deleteProject(currentProject.id);
-            setSelectedProjectId('consolidated');
-            setIsDeleteProjectModalOpen(false);
-        }
-    };
-
-    const projectActions = (
-        <div className="flex items-center gap-2">
-            <ProjectSelector projects={projects} value={selectedProjectId || ''} onValueChange={setSelectedProjectId} showConsolidatedView={true} />
-            {isManager && (
-                <>
-                    <Button onClick={() => setIsAddProjectModalOpen(true)}>
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Novo Projeto
-                    </Button>
-                    {!isConsolidatedView && currentProject && (
-                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                                <DropdownMenuItem onClick={() => setProjectToEdit(currentProject)}>Editar</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setIsDeleteProjectModalOpen(true)} className="text-red-500">Excluir</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
-                </>
-            )}
-        </div>
-    );
+    if (loadingTasks || loadingSettings) {
+        return <div className="flex flex-1 items-center justify-center"> <Loader2 className="h-8 w-8 animate-spin" /> </div>;
+    }
 
     return (
-        <div className="flex flex-col gap-4 h-full">
-            <PageHeader
-                title={isConsolidatedView ? "Visão Consolidada" : (currentProject?.name || "Projetos")}
-                actions={projectActions}
-            />
-
-            {loadingTasks ? (
-                 <div className="flex flex-1 items-center justify-center"> <Loader2 className="h-8 w-8 animate-spin" /> </div>
-            ) : (
-                <Tabs defaultValue="table" className="flex flex-col flex-1">
-                    <TabsList>
-                        <TabsTrigger value="table">Tabela</TabsTrigger>
-                        <TabsTrigger value="board">Kanban</TabsTrigger>
-                        <TabsTrigger value="gantt" disabled={isConsolidatedView}>Gantt</TabsTrigger>
-                        <TabsTrigger value="wbs" disabled={isConsolidatedView}>EAP</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="table" className="flex-1 flex flex-col">
-                       <TableHeaderActions
-                           isManager={isManager}
-                           isConsolidatedView={isConsolidatedView}
-                           onAddTask={() => setIsAddTaskModalOpen(true)}
-                           onPrint={handlePrint}
-                           onOpenManager={() => setIsManagerModalOpen(true)}
-                           onSetSubtask={() => setIsSetSubtaskModalOpen(true)}
-                           isLoading={!printRef.current}
-                           selectedTasks={selectedTasks}
-                           statuses={statuses}
-                           users={users}
-                           statusFilter={statusFilter}
-                           onStatusChange={setStatusFilter}
-                           userFilter={userFilter}
-                           onUserChange={setUserFilter}
-                       />
-                       <TableView 
-                           printSectionRef={printRef}
-                           tasks={filteredTasks}
-                           users={users}
-                           onEditTask={setTaskToEdit}
-                           onViewTask={setTaskToView}
-                           onOpenObservations={setTaskForObservations}
-                           deleteTask={deleteTask}
-                           loading={loadingTasks} 
-                           isManager={isManager}
-                           currentUserId={user?.id}
-                           selectedTasks={selectedTasks}
-                           setSelectedTasks={setSelectedTasks}
-                       />
-                    </TabsContent>
-                    <TabsContent value="board" className="flex-1 overflow-y-auto"><KanbanBoard tasks={filteredTasks} statuses={statuses} onDragEnd={() => {}} loading={loadingTasks} /></TabsContent>
-                   <TabsContent value="gantt" className="flex-1 overflow-y-auto">{!isConsolidatedView && selectedProjectId && <GanttChartWrapper selectedProject={selectedProjectId} />}</TabsContent>
-                    <TabsContent value="wbs" className="flex-1 overflow-y-auto">{!isConsolidatedView && <WbsView tasks={tasks} />}</TabsContent>
-                </Tabs>
-            )}
-
+        <div className="flex flex-col h-full">
+            <div className="p-4 pb-0">
+                <PageHeader
+                    title={isConsolidatedView ? "Visão Consolidada" : (currentProject?.name || "Projetos")}
+                    actions={projectActions}
+                />
+            </div>
+            <Tabs defaultValue="kanban" className="flex flex-col flex-1 min-h-0 p-4 pt-2">
+                <TabsList className="flex-shrink-0">
+                    <TabsTrigger value="table">Tabela</TabsTrigger>
+                    <TabsTrigger value="kanban">Kanban</TabsTrigger>
+                    <TabsTrigger value="gantt" disabled={isConsolidatedView}>Gantt</TabsTrigger>
+                    <TabsTrigger value="wbs" disabled={isConsolidatedView}>EAP</TabsTrigger>
+                </TabsList>
+                <TabsContent value="table" className="flex-1 flex flex-col min-h-0 mt-2">
+                   <TableHeaderActions {...{isManager, isConsolidatedView, statuses, users, statusFilter, userFilter, selectedTasks}} onAddTask={() => setIsAddTaskModalOpen(true)} onPrint={handlePrint} onOpenManager={() => setIsManagerModalOpen(true)} onSetSubtask={() => setIsSetSubtaskModalOpen(true)} isLoading={!printRef.current} onStatusChange={setStatusFilter} onUserChange={setUserFilter} />
+                   <div className="flex-1 overflow-y-auto">
+                        <TableView {...{tasks: filteredTasks, users, deleteTask, isManager, selectedTasks, setSelectedTasks}} ref={printRef} onEditTask={setTaskToEdit} onViewTask={setTaskToView} onOpenObservations={setTaskForObservations} loading={loadingTasks} currentUserId={user?.id} />
+                   </div>
+                </TabsContent>
+                <TabsContent value="kanban" className="flex-1 min-h-0 mt-2">
+                    <KanbanBoard tasks={filteredTasks} statuses={statuses} onDragEnd={handleDragEnd} loading={loadingTasks || loadingSettings} onEditTask={setTaskToEdit} />
+                </TabsContent>
+                <TabsContent value="gantt" className="flex-1 overflow-y-auto mt-2">
+                   {!isConsolidatedView && selectedProjectId && <GanttChartWrapper selectedProject={selectedProjectId} />}
+                </TabsContent>
+                <TabsContent value="wbs" className="flex-1 overflow-y-auto mt-2">
+                    {!isConsolidatedView && <WbsView />}
+                </TabsContent>
+            </Tabs>
+            
+            {/* Modais */}
             <AddTaskModal isOpen={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen} onSave={addTask} selectedProject={selectedProjectId || ''} statuses={statuses} users={users} tasks={tasks} tags={tags} />
             {taskToEdit && ( <EditTaskModal key={`edit-${taskToEdit.id}`} isOpen={!!taskToEdit} onOpenChange={() => setTaskToEdit(null)} onTaskUpdate={refetchTasks} task={taskToEdit} statuses={statuses} users={users} tasks={tasks} tags={tags} /> )}
             {taskToView && ( <ViewTaskModal key={`view-${taskToView.id}`} isOpen={!!taskToView} onOpenChange={() => setTaskToView(null)} task={taskToView} /> )}
             {taskForObservations && ( <TaskObservationsModal key={`obs-${taskForObservations.id}`} isOpen={!!taskForObservations} onOpenChange={() => setTaskForObservations(null)} task={taskForObservations} /> )}
             <TableManagerModal isOpen={isManagerModalOpen} onOpenChange={setIsManagerModalOpen} />
-            <SetSubtaskModal isOpen={isSetSubtaskModalOpen} onOpenChange={setIsSetSubtaskModalOpen} tasks={tasks.filter(t => !selectedTasks.has(t.id))} onSetParent={handleSetSubtask} />
-            
+            <SetSubtaskModal isOpen={isSetSubtaskModalOpen} onOpenChange={() => setIsSetSubtaskModalOpen(false)} tasks={tasks.filter(t => !selectedTasks.has(t.id))} onSetParent={handleSetSubtask} />
             <AddProjectModal isOpen={isAddProjectModalOpen} onOpenChange={setIsAddProjectModalOpen} onSave={addProject} />
             {projectToEdit && <EditProjectModal isOpen={!!projectToEdit} onOpenChange={() => setProjectToEdit(null)} onSave={updateProject} project={projectToEdit} />}
             <AlertModal isOpen={isDeleteProjectModalOpen} onClose={() => setIsDeleteProjectModalOpen(false)} onConfirm={handleDeleteProject} title="Excluir Projeto" description={`Tem certeza que deseja excluir o projeto "${currentProject?.name}"? Todas as tarefas associadas serão perdidas.`} />

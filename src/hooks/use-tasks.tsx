@@ -4,15 +4,12 @@ import type { Task } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 
-// Função para aninhar as tarefas
 const nestTasks = (tasks: Task[]): Task[] => {
     if (!tasks || tasks.length === 0) return [];
-
     const taskMap: { [key: string]: Task & { subtasks: Task[] } } = {};
     tasks.forEach(task => {
         taskMap[task.id] = { ...task, subtasks: [] };
     });
-
     const nestedTasks: Task[] = [];
     tasks.forEach(task => {
         if (task.parent_id && taskMap[task.parent_id]) {
@@ -21,13 +18,12 @@ const nestTasks = (tasks: Task[]): Task[] => {
             nestedTasks.push(taskMap[task.id]);
         }
     });
-
     return nestedTasks;
 };
 
-
 interface TasksContextType {
-  tasks: Task[]; // Agora sempre aninhado
+  tasks: Task[];
+  rawTasks: Task[];
   loading: boolean;
   selectedProjectId: string | null;
   setSelectedProjectId: (projectId: string | null) => void;
@@ -35,12 +31,14 @@ interface TasksContextType {
   addTask: (taskData: Partial<Task> & { tag_ids?: string[] }) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<boolean>;
   setParentTask: (taskIds: string[], parentId: string) => Promise<boolean>;
+  updateTaskStatus: (taskId: string, newStatusId: string) => Promise<void>;
+  updateTask: (taskId: string, updatedData: Partial<Task>) => Promise<void>;
 }
 
 const TasksContext = createContext<TasksContextType | undefined>(undefined);
 
 export const TasksProvider = ({ children }: { children: ReactNode }) => {
-  const [rawTasks, setRawTasks] = useState<Task[]>([]); // Estado para a lista plana
+  const [rawTasks, setRawTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -72,71 +70,80 @@ export const TasksProvider = ({ children }: { children: ReactNode }) => {
     fetchTasks();
   }, [fetchTasks]);
   
-  // Usar useMemo para aninhar as tarefas apenas quando a lista plana mudar
   const tasks = useMemo(() => nestTasks(rawTasks), [rawTasks]);
 
   const addTask = async (taskData: Partial<Task> & { tag_ids?: string[] }): Promise<boolean> => {
     const { tag_ids, ...rest } = taskData;
     const { error } = await supabase.rpc('insert_task_with_tags', {
-      p_project_id: rest.project_id,
-      p_name: rest.name,
-      p_description: rest.description,
-      p_assignee_id: rest.assignee_id,
-      p_status_id: rest.status_id,
-      p_priority: rest.priority,
-      p_progress: rest.progress,
-      p_start_date: rest.start_date,
-      p_end_date: rest.end_date,
-      p_parent_id: rest.parent_id,
-      p_dependencies: rest.dependencies,
-      p_tag_ids: tag_ids,
+      p_project_id: rest.project_id, p_name: rest.name, p_description: rest.description,
+      p_assignee_id: rest.assignee_id, p_status_id: rest.status_id, p_priority: rest.priority,
+      p_progress: rest.progress, p_start_date: rest.start_date, p_end_date: rest.end_date,
+      p_parent_id: rest.parent_id, p_dependencies: rest.dependencies, p_tag_ids: tag_ids, p_custom_fields: {}
     });
-    
-    if (error) {
-      toast({ title: "Erro ao adicionar tarefa", description: error.message, variant: "destructive" });
-      return false;
-    }
+    if (error) { toast({ title: "Erro ao adicionar tarefa", description: error.message, variant: "destructive" }); return false; }
     toast({ title: "Tarefa adicionada com sucesso!" });
-    fetchTasks();
+    await fetchTasks();
     return true;
   };
 
   const deleteTask = async (taskId: string): Promise<boolean> => {
+    setRawTasks(prev => prev.filter(t => t.id !== taskId));
     const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-     if (error) {
+    if (error) { 
       toast({ title: "Erro ao excluir tarefa", description: error.message, variant: "destructive" });
+      fetchTasks(); // Reverter
       return false;
     }
     toast({ title: "Tarefa excluída com sucesso!" });
-    fetchTasks();
     return true;
   };
 
   const setParentTask = async (taskIds: string[], parentId: string): Promise<boolean> => {
-    const { error } = await supabase
-      .from('tasks')
-      .update({ parent_id: parentId })
-      .in('id', taskIds);
-
+    const originalTasks = [...rawTasks];
+    const updatedTasks = rawTasks.map(t => taskIds.includes(t.id) ? { ...t, parent_id: parentId } : t);
+    setRawTasks(updatedTasks);
+    
+    const { error } = await supabase.from('tasks').update({ parent_id: parentId }).in('id', taskIds);
     if (error) {
-      toast({ title: "Erro ao definir tarefa pai", description: error.message, variant: "destructive" });
-      return false;
+       toast({ title: "Erro ao definir tarefa pai", description: error.message, variant: "destructive" });
+       setRawTasks(originalTasks); // Reverter
+       return false;
     }
-
-    toast({ title: "Tarefa pai definida com sucesso!" });
-    fetchTasks();
+    toast({ title: "Hierarquia atualizada!" });
     return true;
   };
 
+  const updateTaskStatus = async (taskId: string, newStatusId: string): Promise<void> => {
+    const originalTasks = [...rawTasks];
+    const updatedTasks = rawTasks.map(t => t.id === taskId ? { ...t, status_id: newStatusId } : t);
+    setRawTasks(updatedTasks); // Atualização otimista
+    
+    const { error } = await supabase.from('tasks').update({ status_id: newStatusId }).eq('id', taskId);
+
+    if (error) {
+      toast({ title: "Erro ao atualizar status", description: error.message, variant: "destructive" });
+      setRawTasks(originalTasks); // Reverter em caso de erro
+    }
+    // Não é necessário refetch, a UI já está atualizada
+  };
+  
+  const updateTask = async (taskId: string, updatedData: Partial<Task>): Promise<void> => {
+      const originalTasks = [...rawTasks];
+      const updatedTasks = rawTasks.map(t => t.id === taskId ? { ...t, ...updatedData } : t);
+      setRawTasks(updatedTasks);
+
+      const { error } = await supabase.from('tasks').update(updatedData).eq('id', taskId);
+      if (error) {
+          toast({ title: "Erro ao atualizar tarefa", description: error.message, variant: "destructive" });
+          setRawTasks(originalTasks);
+      } else {
+          toast({ title: "Tarefa atualizada com sucesso!" });
+      }
+  };
+
   const contextValue = {
-    tasks, // Fornecer a lista aninhada
-    loading,
-    selectedProjectId,
-    setSelectedProjectId,
-    refetchTasks: fetchTasks,
-    addTask,
-    deleteTask,
-    setParentTask,
+    tasks, rawTasks, loading, selectedProjectId, setSelectedProjectId,
+    refetchTasks: fetchTasks, addTask, deleteTask, setParentTask, updateTaskStatus, updateTask
   };
 
   return (
@@ -148,8 +155,6 @@ export const TasksProvider = ({ children }: { children: ReactNode }) => {
 
 export const useTasks = () => {
   const context = useContext(TasksContext);
-  if (context === undefined) {
-    throw new Error("useTasks must be used within a TasksProvider");
-  }
+  if (context === undefined) throw new Error("useTasks must be used within a TasksProvider");
   return context;
 };
