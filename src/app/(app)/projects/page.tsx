@@ -41,14 +41,12 @@ const filterHierarchicalTasks = (tasks: TaskWithSubtasks[], statusFilter: string
         const subtasks = task.subtasks ? filterHierarchicalTasks(task.subtasks, statusFilter, userFilter) : [];
         const statusMatch = statusFilter === 'all' || task.status_id === statusFilter;
         const userMatch = userFilter === 'all' || task.assignee_id === userFilter;
-
         if ((statusMatch && userMatch) || subtasks.length > 0) {
             return { ...task, subtasks };
         }
         return null;
     }).filter((task): task is TaskWithSubtasks => task !== null);
 };
-
 
 const ProjectsPageContent = () => {
     const { projects, addProject, updateProject, deleteProject } = useProjects();
@@ -58,6 +56,9 @@ const ProjectsPageContent = () => {
     const { tasks, rawTasks, loading: loadingTasks, selectedProjectId, setSelectedProjectId, refetchTasks, addTask, deleteTask, setParentTask, updateTaskStatus, updateTask } = useTasks();
     const { toast } = useToast();
 
+    // Estado para controlar a aba ativa
+    const [activeTab, setActiveTab] = useState('table');
+    
     // Modais
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
     const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
@@ -105,7 +106,7 @@ const ProjectsPageContent = () => {
         setIsSetSubtaskModalOpen(false);
     };
 
-    const handleDeleteProject = async () => { /* ... */ };
+    const handleDeleteProject = async () => { /* Implementação... */ };
 
     const projectActions = ( <div className="flex items-center gap-2"> <ProjectSelector projects={projects} value={selectedProjectId || ''} onValueChange={setSelectedProjectId} showConsolidatedView={true} /> {isManager && ( <> <Button onClick={() => setIsAddProjectModalOpen(true)}> <PlusCircle className="h-4 w-4 mr-2" /> Novo Projeto </Button> {!isConsolidatedView && currentProject && ( <DropdownMenu> <DropdownMenuTrigger asChild><Button variant="outline" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger> <DropdownMenuContent> <DropdownMenuItem onClick={() => setProjectToEdit(currentProject)}>Editar</DropdownMenuItem> <DropdownMenuItem onClick={() => setIsDeleteProjectModalOpen(true)} className="text-red-500">Excluir</DropdownMenuItem> </DropdownMenuContent> </DropdownMenu> )} </> )} </div> );
     
@@ -118,12 +119,12 @@ const ProjectsPageContent = () => {
             <div className="p-4 pb-0">
                 <PageHeader title={isConsolidatedView ? "Visão Consolidada" : (currentProject?.name || "Projetos")} actions={projectActions} />
             </div>
-            <Tabs defaultValue="kanban" className="flex flex-col flex-1 min-h-0 p-4 pt-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0 p-4 pt-2">
                 <TabsList className="flex-shrink-0">
                     <TabsTrigger value="table">Tabela</TabsTrigger>
                     <TabsTrigger value="kanban">Kanban</TabsTrigger>
-                    <TabsTrigger value="gantt" disabled={isConsolidatedView}>Gantt</TabsTrigger>
-                    <TabsTrigger value="wbs" disabled={isConsolidatedView}>EAP</TabsTrigger>
+                    <TabsTrigger value="gantt">Gantt</TabsTrigger>
+                    <TabsTrigger value="wbs">EAP</TabsTrigger>
                 </TabsList>
 
                 {/* Tabela */}
@@ -137,14 +138,12 @@ const ProjectsPageContent = () => {
                     <KanbanBoard tasks={filteredKanbanTasks} statuses={statuses} onDragEnd={handleDragEnd} loading={loadingTasks || loadingSettings} onEditTask={setTaskToEdit} />
                 </TabsContent>
 
-                {/* Gantt */}
+                {/* Gantt e EAP com `key` para forçar a remontagem */}
                 <TabsContent value="gantt" className="flex-1 overflow-y-auto mt-2">
-                   {!isConsolidatedView && <GanttChartWrapper tasks={filteredHierarchicalTasks} />}
+                   <GanttChartWrapper key={selectedProjectId} tasks={filteredHierarchicalTasks} isConsolidated={isConsolidatedView} />
                 </TabsContent>
-
-                {/* EAP */}
                 <TabsContent value="wbs" className="flex-1 overflow-y-auto mt-2">
-                    {!isConsolidatedView && <WbsView tasks={filteredHierarchicalTasks} />}
+                    <WbsView key={selectedProjectId} tasks={filteredHierarchicalTasks} isConsolidated={isConsolidatedView} />
                 </TabsContent>
             </Tabs>
             
